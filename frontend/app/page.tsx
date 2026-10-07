@@ -131,7 +131,9 @@ const range = (p: number, [a, b]: [number, number]) =>
 const smooth = (k: number) => k * k * (3 - 2 * k);
 
 function getScrollProgress() {
-  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const el = document.getElementById("scroll-sections");
+  const total = el ? el.offsetHeight : document.documentElement.scrollHeight;
+  const max = total - window.innerHeight;
   return max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0;
 }
 
@@ -459,7 +461,10 @@ export default function Home() {
           }}
         />
       ) : (
-        <div style={{ position: "relative", zIndex: 1, pointerEvents: "none" }}>
+        <div
+          id="scroll-sections"
+          style={{ position: "relative", zIndex: 1, pointerEvents: "none" }}
+        >
           {SECTIONS.map((s, i) => (
             <section
               key={s.title}

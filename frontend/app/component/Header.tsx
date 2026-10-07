@@ -50,7 +50,7 @@ export default function Header() {
   return (
     <header className={styles.header}>
       <Link href="/" className={styles.logo} aria-label="Home">
-        <img src="/logo.svg" alt="Einsen" />
+        <img src="/logo.png" alt="Einsen" />
       </Link>
 
       <nav className={styles.nav}>
