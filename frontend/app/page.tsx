@@ -473,7 +473,7 @@ export default function Home() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: i % 2 === 0 ? "flex-start" : "flex-end",
-                padding: "0 6vw",
+                padding: "25vh 6vw 0",
                 boxSizing: "border-box",
               }}
             >
