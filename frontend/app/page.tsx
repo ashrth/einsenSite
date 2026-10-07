@@ -42,16 +42,18 @@ const STOPS = [
   },
   {
     name: "Power button",
-    pos: new THREE.Vector3(8.54, 6.23, 12.77),
-    target: new THREE.Vector3(-3.99, 1.43, -1.17),
+    pos: new THREE.Vector3(-2.03, 2.13, 6.53),
+    target: new THREE.Vector3(2.32, 1.68, 0.68),
     offsetX: 0,
   },
+
   {
     name: "Logo",
-    pos: new THREE.Vector3(8.54, 6.23, 12.77),
-    target: new THREE.Vector3(-3.99, 1.43, -1.17),
+    pos: new THREE.Vector3(0.2, 0.77, 6.81),
+    target: new THREE.Vector3(0.39, 1.65, 0.61),
     offsetX: 0,
   },
+
   {
     name: "Bird's-eye",
     pos: new THREE.Vector3(0, 14, 0.5),
@@ -362,9 +364,9 @@ function EdgeGlow() {
       />
       <group ref={sweep}>
         <Lightformer
-          position={[8, 4, 0]}
-          scale={[1, 6, 1]}
-          intensity={8}
+          position={[6, 6, 0]}
+          scale={[2, 8, 1]}
+          intensity={20}
           target={[0, 0, 0]}
         />
       </group>
