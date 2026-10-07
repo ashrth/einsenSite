@@ -11,9 +11,9 @@ import {
   Lightformer,
 } from "@react-three/drei";
 
-const DEBUG = false;
+const DEBUG = true;
 const MODEL_PATH = "/models/modelwithlogo.glb";
-const MODEL_SIZE = 5;
+const MODEL_SIZE = 8;
 
 // Zoom: smaller = more zoomed in (try 25–35)
 const FOV = 30;
@@ -26,27 +26,36 @@ const ENV_INTENSITY = 2;
 // offsetX: shifts the machine on screen. Negative = machine on the right, positive = on the left.
 const STOPS = [
   {
-    name: "Side view",
-    pos: new THREE.Vector3(7.38, 5.48, 16.5),
-    offsetX: -0.18,
+    name: "Power button",
+    pos: new THREE.Vector3(3, 1.5, 4),
+    target: new THREE.Vector3(1.5, 0.2, 0.5),
+    offsetX: -0.1,
   },
   {
-    name: "Top view",
-    pos: new THREE.Vector3(-18.1, 4.77, 12.02),
+    name: "Bird's-eye",
+    pos: new THREE.Vector3(0, 14, 0.5),
+    target: new THREE.Vector3(0, 0, 0),
     offsetX: 0.18,
   },
   {
-    name: "Close-up",
-    pos: new THREE.Vector3(6.2, 4.49, 13.84),
+    name: "Plate out",
+    pos: new THREE.Vector3(0, 13, 3),
+    target: new THREE.Vector3(0, 0, 0),
     offsetX: -0.18,
   },
   {
-    name: "Front / output",
-    pos: new THREE.Vector3(-12.18, 2.75, 3.18),
+    name: "Front",
+    pos: new THREE.Vector3(0, 2, 14),
+    target: new THREE.Vector3(0, 0, 0),
+    offsetX: 0.18,
+  },
+  {
+    name: "Side",
+    pos: new THREE.Vector3(14, 3, 0),
+    target: new THREE.Vector3(0, 0, 0),
     offsetX: 0.18,
   },
 ];
-
 const SECTIONS = [
   {
     title: "Built for the fabrics you love",
@@ -82,21 +91,21 @@ const MOVES: {
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.4, 0.67],
+    at: [0.25, 0.5],
   },
   {
     name: "Grapple_Left001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.4, 0.67],
+    at: [0.25, 0.5],
   },
   {
     name: "Grapple_Right001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.4, 0.67],
+    at: [0.25, 0.5],
   },
 ];
 
@@ -185,39 +194,41 @@ function Machine() {
 
 // Moves the camera around the machine's center, like orbiting it
 function CameraRig() {
-  const spheres = useMemo(
-    () => STOPS.map((s) => new THREE.Spherical().setFromVector3(s.pos)),
+  const stops = useMemo(
+    () =>
+      STOPS.map((s) => ({
+        target: s.target,
+        sph: new THREE.Spherical().setFromVector3(s.pos.clone().sub(s.target)),
+        offsetX: s.offsetX,
+      })),
     [],
   );
   const sph = useMemo(() => new THREE.Spherical(), []);
-  const center = useMemo(() => new THREE.Vector3(0, 0, 0), []);
+  const target = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(({ camera, size }) => {
-    const t = scrollState.progress * (STOPS.length - 1);
-    const i = Math.min(Math.floor(t), STOPS.length - 2);
+    const t = scrollState.progress * (stops.length - 1);
+    const i = Math.min(Math.floor(t), stops.length - 2);
     const e = smooth(t - i);
-    const a = spheres[i];
-    const b = spheres[i + 1];
+    const a = stops[i];
+    const b = stops[i + 1];
 
-    // Take the shortest way around
-    let dTheta = b.theta - a.theta;
+    let dTheta = b.sph.theta - a.sph.theta;
     dTheta =
       ((((dTheta + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) -
       Math.PI;
 
     sph.set(
-      THREE.MathUtils.lerp(a.radius, b.radius, e),
-      THREE.MathUtils.lerp(a.phi, b.phi, e),
-      a.theta + dTheta * e,
+      THREE.MathUtils.lerp(a.sph.radius, b.sph.radius, e),
+      THREE.MathUtils.lerp(a.sph.phi, b.sph.phi, e),
+      a.sph.theta + dTheta * e,
     );
-    camera.position.setFromSpherical(sph);
-    camera.lookAt(center);
+    target.lerpVectors(a.target, b.target, e);
 
-    const offsetX = THREE.MathUtils.lerp(
-      STOPS[i].offsetX,
-      STOPS[i + 1].offsetX,
-      e,
-    );
+    camera.position.setFromSpherical(sph).add(target);
+    camera.lookAt(target);
+
+    const offsetX = THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
     (camera as THREE.PerspectiveCamera).setViewOffset(
       size.width,
       size.height,
@@ -230,9 +241,9 @@ function CameraRig() {
 
   return null;
 }
-
 function CameraReadout() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const controls = useThree((s) => s.controls) as any;
 
   useEffect(() => {
     camera.clearViewOffset();
@@ -240,10 +251,13 @@ function CameraReadout() {
 
   useFrame(() => {
     const el = document.getElementById("cam-readout");
-    if (!el) return;
+    if (!el || !controls) return;
     const p = camera.position;
+    const t = controls.target;
     const f = (n: number) => n.toFixed(2);
-    el.textContent = `pos: new THREE.Vector3(${f(p.x)}, ${f(p.y)}, ${f(p.z)}),`;
+    el.textContent =
+      `pos: new THREE.Vector3(${f(p.x)}, ${f(p.y)}, ${f(p.z)}), ` +
+      `target: new THREE.Vector3(${f(t.x)}, ${f(t.y)}, ${f(t.z)}),`;
   });
 
   return null;
@@ -306,7 +320,7 @@ export default function Home() {
             <Machine />
             {DEBUG ? (
               <>
-                <OrbitControls makeDefault enablePan={false} />
+                <OrbitControls makeDefault />
                 <CameraReadout />
               </>
             ) : (
@@ -385,6 +399,3 @@ export default function Home() {
 }
 
 useGLTF.preload(MODEL_PATH);
-
-
-// well jaljsdn
