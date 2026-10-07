@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+const cn = (...c: (string | undefined)[]) => c.filter(Boolean).join(" ");
 import { useEffect, useRef } from "react";
 
 interface LiquidChromeProps {
@@ -112,7 +112,7 @@ const fragmentShaderSource = `
 
     gl_FragColor = vec4(col, 1.0);
   }
-`;;
+`;
 
 export function LiquidChrome({
   className,
@@ -153,7 +153,10 @@ export function LiquidChrome({
     gl.shaderSource(fragmentShader, fragmentShaderSource);
     gl.compileShader(fragmentShader);
     if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-      console.error("Fragment shader error:", gl.getShaderInfoLog(fragmentShader));
+      console.error(
+        "Fragment shader error:",
+        gl.getShaderInfoLog(fragmentShader),
+      );
       return;
     }
 
@@ -172,7 +175,7 @@ export function LiquidChrome({
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW
+      gl.STATIC_DRAW,
     );
 
     const positionLocation = gl.getAttribLocation(program, "position");
@@ -215,7 +218,12 @@ export function LiquidChrome({
 
       gl.uniform1f(timeLocation, elapsedTime);
       gl.uniform2f(mouseLocation, mouse[0], mouse[1]);
-      gl.uniform3f(baseColorLocation, colorRef.current[0], colorRef.current[1], colorRef.current[2]);
+      gl.uniform3f(
+        baseColorLocation,
+        colorRef.current[0],
+        colorRef.current[1],
+        colorRef.current[2],
+      );
       gl.uniform1f(amplitudeLocation, amplitudeRef.current);
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);

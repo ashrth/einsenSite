@@ -1,0 +1,59 @@
+.footer {
+  position: relative;
+  z-index: 1; /* sits above the fixed 3D scene */
+  height: 40vh;
+  min-height: 300px;
+  overflow: hidden;
+  background: #000;
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
+}
+
+/* Fades the chrome into the black page above, and darkens the right side so the text stays readable */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, #000 0%, transparent 35%),
+    linear-gradient(to left, rgba(0, 0, 0, 0.75) 0%, transparent 55%);
+}
+
+.links {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 40px;
+  padding: 0 4vw 40px;
+  box-sizing: border-box;
+}
+
+.link,
+.copy {
+  margin: 0 -0.45em 0 0; /* cancels the extra space after the last letter so right edges line up */
+  font:
+    400 13px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  color: #fff;
+  text-decoration: none;
+}
+
+.link {
+  transition: opacity 0.3s;
+}
+
+.link:hover {
+  opacity: 0.6;
+}
+
+.copy {
+  color: rgba(255, 255, 255, 0.7);
+}
