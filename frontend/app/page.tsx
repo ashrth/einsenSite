@@ -27,6 +27,10 @@ const GLOW_VIEW = 3; // which STOPS line it shows on (3 = bird's-eye)
 const GLOW_BRIGHTNESS = 4; // brightness of the outline
 const GLOW_SPEED = 0.8; // speed of the travelling highlight
 
+// Text fades out as it scrolls up toward the header (pixels from top of screen)
+const FADE_START = 280; // starts fading here
+const FADE_END = 110; // fully gone here (just below the header)
+
 // How strongly the machine reflects light. Higher = more visible on black.
 const ENV_INTENSITY = 2;
 
@@ -377,6 +381,39 @@ function EdgeGlow() {
 }
 
 export default function Home() {
+  useEffect(() => {
+    if (DEBUG) return;
+    const blocks = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-fade]"),
+    );
+    let raf = 0;
+
+    const update = () => {
+      for (const el of blocks) {
+        const top = el.getBoundingClientRect().top;
+        const o = Math.min(
+          Math.max((top - FADE_END) / (FADE_START - FADE_END), 0),
+          1,
+        );
+        el.style.opacity = String(o);
+        el.style.transform = `translateY(${(1 - o) * -10}px)`; // slight drift up as it fades
+      }
+    };
+
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
   return (
     <main style={{ background: "#000" }}>
       {/* Fixed 3D scene with a faint glow behind the machine */}
@@ -478,6 +515,7 @@ export default function Home() {
               }}
             >
               <div
+                data-fade
                 style={{
                   maxWidth: 380,
                   fontFamily: "system-ui, sans-serif",
