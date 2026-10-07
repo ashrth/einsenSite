@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -11,12 +11,21 @@ import {
   Lightformer,
 } from "@react-three/drei";
 
-const DEBUG = true;
+const DEBUG = false;
 const MODEL_PATH = "/models/modelwithlogo.glb";
 const MODEL_SIZE = 8;
 
 // Zoom: smaller = more zoomed in (try 25–35)
 const FOV = 30;
+
+const LED_NAME = "LED_EN_OG_4mm";
+const LED_VIEW = 3; // which STOPS line it shows on (0 = first). 3 = bird's-eye
+const LED_SPEED = 1.5; // how fast it travels around
+const LED_LENGTH = 40; // higher = shorter light streak
+const LED_BRIGHTNESS = 6;
+const GLOW_VIEW = 3; // which STOPS line it shows on (3 = bird's-eye)
+const GLOW_BRIGHTNESS = 4; // brightness of the outline
+const GLOW_SPEED = 0.8; // speed of the travelling highlight
 
 // How strongly the machine reflects light. Higher = more visible on black.
 const ENV_INTENSITY = 2;
@@ -26,10 +35,22 @@ const ENV_INTENSITY = 2;
 // offsetX: shifts the machine on screen. Negative = machine on the right, positive = on the left.
 const STOPS = [
   {
+    name: "Overview",
+    pos: new THREE.Vector3(8.54, 6.23, 12.77),
+    target: new THREE.Vector3(-3.99, 1.43, -1.17),
+    offsetX: 0,
+  },
+  {
     name: "Power button",
-    pos: new THREE.Vector3(3, 1.5, 4),
-    target: new THREE.Vector3(1.5, 0.2, 0.5),
-    offsetX: -0.1,
+    pos: new THREE.Vector3(8.54, 6.23, 12.77),
+    target: new THREE.Vector3(-3.99, 1.43, -1.17),
+    offsetX: 0,
+  },
+  {
+    name: "Logo",
+    pos: new THREE.Vector3(8.54, 6.23, 12.77),
+    target: new THREE.Vector3(-3.99, 1.43, -1.17),
+    offsetX: 0,
   },
   {
     name: "Bird's-eye",
@@ -53,26 +74,18 @@ const STOPS = [
     name: "Side",
     pos: new THREE.Vector3(14, 3, 0),
     target: new THREE.Vector3(0, 0, 0),
-    offsetX: 0.18,
+    offsetX: -0.18,
   },
 ];
+
 const SECTIONS = [
-  {
-    title: "Built for the fabrics you love",
-    body: "Replace this with a one-line description of your machine.",
-  },
-  {
-    title: "Compact from above",
-    body: "Talk about footprint, layout, or how it fits on a shop floor.",
-  },
-  {
-    title: "What happens inside",
-    body: "Explain the pressing mechanism and what makes it reliable.",
-  },
-  {
-    title: "Finished output",
-    body: "Describe what comes out of the machine, and add a contact button here.",
-  },
+  { title: "EINSEN", body: "Automated iron." },
+  { title: "One touch to start", body: "Text about the power button." },
+  { title: "Designed with care", body: "Text about the brand." },
+  { title: "Compact from above", body: "Text about the footprint." },
+  { title: "The plate slides out", body: "Text about loading the shirt." },
+  { title: "Front view", body: "Text about the front." },
+  { title: "Side view", body: "Text about the side." },
 ];
 
 const SMOOTHING = 5;
@@ -91,21 +104,21 @@ const MOVES: {
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.25, 0.5],
+    at: [0.5, 0.67],
   },
   {
     name: "Grapple_Left001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.25, 0.5],
+    at: [0.5, 0.67],
   },
   {
     name: "Grapple_Right001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.25, 0.5],
+    at: [0.5, 0.67],
   },
 ];
 
@@ -171,7 +184,60 @@ function Machine() {
     return [...map.entries()];
   }, [scene]);
 
-  useFrame(() => {
+  const led = useMemo(() => {
+    const root = scene.getObjectByName(LED_NAME);
+    if (!root) {
+      console.warn(`LED not found: "${LED_NAME}"`);
+      return null;
+    }
+    const uniforms = {
+      uAngle: { value: 0 },
+      uStrength: { value: 0 },
+      uCenter: { value: new THREE.Vector3() },
+    };
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry.computeBoundingBox();
+      mesh.geometry.boundingBox!.getCenter(uniforms.uCenter.value);
+      const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms);
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            "#include <common>",
+            "#include <common>\nvarying vec3 vLedPos;",
+          )
+          .replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\nvLedPos = position;",
+          );
+        shader.fragmentShader = shader.fragmentShader
+          .replace(
+            "#include <common>",
+            "#include <common>\nvarying vec3 vLedPos;\nuniform float uAngle;\nuniform float uStrength;\nuniform vec3 uCenter;",
+          )
+          .replace(
+            "#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+          vec3 lp = vLedPos - uCenter;
+          float a = atan(lp.z, lp.x);
+          float d = abs(mod(a - uAngle + 3.14159265, 6.2831853) - 3.14159265);
+          totalEmissiveRadiance += vec3(1.0) * exp(-d * d * ${LED_LENGTH.toFixed(1)}) * uStrength * ${LED_BRIGHTNESS.toFixed(1)};`,
+          );
+      };
+      mesh.material = mat;
+    });
+    return uniforms;
+  }, [scene]);
+
+  useFrame((_, delta) => {
+    if (led) {
+      led.uAngle.value += delta * LED_SPEED;
+      const viewAt = LED_VIEW / (STOPS.length - 1);
+      const dist = Math.abs(scrollState.progress - viewAt);
+      led.uStrength.value = Math.max(0, 1 - dist / 0.1);
+    }
     const p = scrollState.progress;
     for (const [obj, moves] of parts) {
       obj.position.copy(obj.userData.startPos);
@@ -263,6 +329,49 @@ function CameraReadout() {
   return null;
 }
 
+function EdgeGlow() {
+  const ring = useRef<THREE.Mesh>(null);
+  const sweep = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    const viewAt = GLOW_VIEW / (STOPS.length - 1);
+    const k = Math.max(0, 1 - Math.abs(scrollState.progress - viewAt) / 0.1);
+
+    // Ring above the machine: shows up as an outline on the rounded edges
+    if (ring.current) {
+      (ring.current.material as THREE.MeshBasicMaterial).color.setScalar(
+        GLOW_BRIGHTNESS * k,
+      );
+    }
+    // Strip circling the machine: a highlight that travels along the edges
+    if (sweep.current) {
+      sweep.current.rotation.y += delta * GLOW_SPEED;
+      sweep.current.scale.setScalar(Math.max(k, 0.001));
+    }
+  });
+
+  return (
+    <>
+      <Lightformer
+        ref={ring}
+        form="ring"
+        position={[0, 5, 0]}
+        scale={10}
+        intensity={0}
+        target={[0, 0, 0]}
+      />
+      <group ref={sweep}>
+        <Lightformer
+          position={[8, 4, 0]}
+          scale={[1, 6, 1]}
+          intensity={8}
+          target={[0, 0, 0]}
+        />
+      </group>
+    </>
+  );
+}
+
 export default function Home() {
   return (
     <main style={{ background: "#000" }}>
@@ -278,7 +387,7 @@ export default function Home() {
       >
         <Canvas camera={{ position: [5, 1, 0], fov: FOV }}>
           <Suspense fallback={null}>
-            <Environment resolution={256}>
+            <Environment resolution={256} frames={Infinity}>
               {/* Rim strips: outline the edges */}
               <Lightformer
                 intensity={6}
@@ -313,6 +422,7 @@ export default function Home() {
                 scale={[10, 2, 1]}
                 target={[0, 0, 0]}
               />
+              <EdgeGlow />
             </Environment>
             <directionalLight position={[6, 10, 4]} intensity={0.8} />
 
