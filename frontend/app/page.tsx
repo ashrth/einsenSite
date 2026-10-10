@@ -531,11 +531,12 @@ export default function Home() {
               <section
                 key="hero"
                 style={{
+                  position: "relative",
                   height: "100vh",
                   display: "flex",
                   alignItems: "flex-end",
                   justifyContent: "space-between",
-                  padding: "0 6vw 8vh",
+                  padding: "0 6vw 18vh",
                   boxSizing: "border-box",
                 }}
               >
@@ -552,9 +553,20 @@ export default function Home() {
                 >
                   Prototype out now
                 </p>
-                <a href="#waitlist" data-fade className={heroStyles.button}>
-                  Join the waitlist
-                </a>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    bottom: "33vh",
+                    display: "flex",
+                    justifyContent: "center",
+                  }}
+                >
+                  <a href="#waitlist" data-fade className={heroStyles.button}>
+                    Join the waitlist
+                  </a>
+                </div>
               </section>
             ) : (
               <section

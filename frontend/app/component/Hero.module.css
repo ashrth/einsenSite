@@ -36,11 +36,13 @@
     rgba(255, 255, 255, 0.06) 45%,
     rgba(255, 255, 255, 0) 85%
   );
+  -webkit-background-clip: text;
+  background-clip: text;
 
   -webkit-text-stroke: 1px rgba(255, 255, 255, 0.14);
   opacity: 0;
   transform: translateY(8%);
-  filter: drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.18));
+
   animation: rise 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
