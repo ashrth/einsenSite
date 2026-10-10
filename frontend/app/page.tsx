@@ -10,6 +10,9 @@ import {
   OrbitControls,
   Lightformer,
 } from "@react-three/drei";
+import { HeroWord } from "@/components/Hero";
+import heroStyles from "@/components/Hero.module.css";
+import ScrollRevealText from "@/components/ScrollRevealText";
 
 const DEBUG = false;
 const MODEL_PATH = "/models/modelwithlogo.glb";
@@ -40,7 +43,7 @@ const ENV_INTENSITY = 2;
 const STOPS = [
   {
     name: "Overview",
-    pos: new THREE.Vector3(8.54, 6.23, 12.77),
+    pos: new THREE.Vector3(5.41, 5.03, 9.29),
     target: new THREE.Vector3(-3.99, 1.43, -1.17),
     offsetX: 0,
   },
@@ -76,24 +79,33 @@ const STOPS = [
     target: new THREE.Vector3(0, 0, 0),
     offsetX: 0.18,
   },
-  {
-    name: "Side",
-    pos: new THREE.Vector3(14, 3, 0),
-    target: new THREE.Vector3(0, 0, 0),
-    offsetX: -0.18,
-  },
 ];
+
+const FONT = "var(--font-display), system-ui, sans-serif";
 
 const SECTIONS = [
-  { title: "EINSEN", body: "Automated iron." },
-  { title: "One touch to start", body: "Text about the power button." },
-  { title: "Designed with care", body: "Text about the brand." },
-  { title: "Compact from above", body: "Text about the footprint." },
-  { title: "The plate slides out", body: "Text about loading the shirt." },
-  { title: "Front view", body: "Text about the front." },
-  { title: "Side view", body: "Text about the side." },
+  { label: "", text: "" }, // hero
+  {
+    label: "Power",
+    text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
+  },
+  {
+    label: "Identity",
+    text: "Designed to sit quietly in your home, built to do the work you never wanted to.",
+  },
+  {
+    label: "Footprint",
+    text: "Compact from above. Fits on a shelf, a counter or a laundry room corner.",
+  },
+  {
+    label: "Loading",
+    text: "The plate slides out. Lay your shirt down and let the machine take over.",
+  },
+  {
+    label: "Front",
+    text: "Every detail engineered for one job: crisp, wrinkle-free clothes in minutes.",
+  },
 ];
-
 const SMOOTHING = 5;
 
 // Each line moves one part from CLOSED to its Blender (open) position.
@@ -110,21 +122,21 @@ const MOVES: {
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.5, 0.67],
+    at: [0.6, 0.8],
   },
   {
     name: "Grapple_Left001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.5, 0.67],
+    at: [0.6, 0.8],
   },
   {
     name: "Grapple_Right001",
     type: "slide",
     axis: "z",
     amount: -0.25,
-    at: [0.5, 0.67],
+    at: [0.6, 0.8],
   },
 ];
 
@@ -415,8 +427,8 @@ export default function Home() {
     };
   }, []);
   return (
-    <main style={{ background: "#000" }}>
-      {/* Fixed 3D scene with a faint glow behind the machine */}
+    <main style={{ position: "relative", background: "#000" }}>
+      {/* Background glow */}
       <div
         style={{
           position: "fixed",
@@ -425,59 +437,22 @@ export default function Home() {
           background:
             "radial-gradient(ellipse 55% 45% at 50% 55%, #242424 0%, #0a0a0a 55%, #000 100%)",
         }}
+      />
+
+      {/* Giant brand name, behind the machine */}
+      {!DEBUG && <HeroWord word="einsen" />}
+
+      {/* 3D scene */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2,
+          pointerEvents: DEBUG ? "auto" : "none",
+        }}
       >
         <Canvas camera={{ position: [5, 1, 0], fov: FOV }}>
-          <Suspense fallback={null}>
-            <Environment resolution={256} frames={Infinity}>
-              {/* Rim strips: outline the edges */}
-              <Lightformer
-                intensity={6}
-                position={[-10, 3, 0]}
-                scale={[8, 0.8, 1]}
-                target={[0, 0, 0]}
-              />
-              <Lightformer
-                intensity={6}
-                position={[10, 3, 0]}
-                scale={[8, 0.8, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Top softbox: lights the top surface */}
-              <Lightformer
-                intensity={2.5}
-                position={[0, 10, 0]}
-                scale={[10, 4, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Back light: separates the machine from the background */}
-              <Lightformer
-                intensity={2}
-                position={[0, 4, -10]}
-                scale={[10, 2, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Faint front fill */}
-              <Lightformer
-                intensity={0.6}
-                position={[0, 3, 10]}
-                scale={[10, 2, 1]}
-                target={[0, 0, 0]}
-              />
-              <EdgeGlow />
-            </Environment>
-            <directionalLight position={[6, 10, 4]} intensity={0.8} />
-
-            <ScrollTracker />
-            <Machine />
-            {DEBUG ? (
-              <>
-                <OrbitControls makeDefault />
-                <CameraReadout />
-              </>
-            ) : (
-              <CameraRig />
-            )}
-          </Suspense>
+          {/* keep everything you currently have inside <Canvas> exactly as it is */}
         </Canvas>
       </div>
 
@@ -489,7 +464,7 @@ export default function Home() {
             left: 0,
             right: 0,
             bottom: 0,
-            zIndex: 2,
+            zIndex: 5,
             padding: "12px 16px",
             background: "rgba(255,255,255,0.9)",
             fontFamily: "monospace",
@@ -500,53 +475,84 @@ export default function Home() {
       ) : (
         <div
           id="scroll-sections"
-          style={{ position: "relative", zIndex: 1, pointerEvents: "none" }}
+          style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}
         >
-          {SECTIONS.map((s, i) => (
-            <section
-              key={s.title}
-              style={{
-                height: "100vh",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: i % 2 === 0 ? "flex-start" : "flex-end",
-                padding: "25vh 6vw 0",
-                boxSizing: "border-box",
-              }}
-            >
-              <div
-                data-fade
+          {SECTIONS.map((s, i) =>
+            i === 0 ? (
+              <section
+                key="hero"
                 style={{
-                  maxWidth: 380,
-                  fontFamily: "system-ui, sans-serif",
-                  pointerEvents: "auto",
+                  height: "100vh",
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  padding: "0 6vw 8vh",
+                  boxSizing: "border-box",
                 }}
               >
-                <h2
-                  style={{
-                    fontSize: "clamp(28px, 4vw, 48px)",
-                    lineHeight: 1.1,
-                    margin: "0 0 12px",
-                    color: "#fff",
-                    fontWeight: 500,
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  {s.title}
-                </h2>
                 <p
+                  data-fade
                   style={{
-                    fontSize: 18,
-                    lineHeight: 1.5,
                     margin: 0,
-                    color: "#8a8a8a",
+                    fontFamily: FONT,
+                    fontSize: 13,
+                    letterSpacing: "0.4em",
+                    textTransform: "uppercase",
+                    color: "rgba(255,255,255,0.7)",
                   }}
                 >
-                  {s.body}
+                  Prototype out now
                 </p>
-              </div>
-            </section>
-          ))}
+                <a href="#waitlist" data-fade className={heroStyles.button}>
+                  Join the waitlist
+                </a>
+              </section>
+            ) : (
+              <section
+                key={s.label}
+                style={{
+                  height: "100vh",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: i % 2 === 0 ? "flex-start" : "flex-end",
+                  padding: "25vh 6vw 0",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div
+                  data-fade
+                  style={{
+                    maxWidth: 520,
+                    fontFamily: FONT,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: "0 0 20px",
+                      fontSize: 12,
+                      letterSpacing: "0.4em",
+                      textTransform: "uppercase",
+                      color: "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    • {s.label}
+                  </p>
+                  <ScrollRevealText
+                    text={s.text}
+                    style={{
+                      margin: 0,
+                      fontSize: "clamp(28px, 3.2vw, 46px)",
+                      fontWeight: 300,
+                      lineHeight: 1.15,
+                      letterSpacing: "-0.01em",
+                      color: "#fff",
+                    }}
+                  />
+                </div>
+              </section>
+            ),
+          )}
         </div>
       )}
     </main>
