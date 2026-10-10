@@ -3,6 +3,14 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "./component/Header";
 import Footer from "./component/Footer";
+import { Inter_Tight } from 'next/font/google'
+
+
+const display = Inter_Tight({
+  subsets: ['latin'],
+  weight: ['200', '300', '400', '500'],
+  variable: '--font-display',
+})
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
