@@ -11,6 +11,7 @@ import {
   Lightformer,
 } from "@react-three/drei";
 import ChoppedText from "./component/ChoppedText";
+import WaitlistSection from "./component/WaitlistSection";
 import { HeroWord } from "./component/Hero";
 import heroStyles from "./component/Hero.module.css";
 import ScrollRevealText from "./component/ScrollRevealText";
@@ -617,13 +618,17 @@ export default function Home() {
           )}
         </div>
       )}
+
       {!DEBUG && (
-        <ChoppedText
-          kicker="The end of"
-          word="ironing."
-          before="tiring chores."
-          after="effortless results."
-        />
+        <>
+          <ChoppedText
+            kicker="The end of manual"
+            word="ironing."
+            before="tiring chore."
+            after="effortless results."
+          />
+          <WaitlistSection />
+        </>
       )}
     </main>
   );
