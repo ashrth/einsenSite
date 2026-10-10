@@ -451,7 +451,57 @@ export default function Home() {
         }}
       >
         <Canvas camera={{ position: [5, 1, 0], fov: FOV }}>
-          {/* keep everything you currently have inside <Canvas> exactly as it is */}
+          <Suspense fallback={null}>
+            <Environment resolution={256} frames={Infinity}>
+              {/* Rim strips: outline the edges */}
+              <Lightformer
+                intensity={6}
+                position={[-10, 3, 0]}
+                scale={[8, 0.8, 1]}
+                target={[0, 0, 0]}
+              />
+              <Lightformer
+                intensity={6}
+                position={[10, 3, 0]}
+                scale={[8, 0.8, 1]}
+                target={[0, 0, 0]}
+              />
+              {/* Top softbox */}
+              <Lightformer
+                intensity={2.5}
+                position={[0, 10, 0]}
+                scale={[10, 4, 1]}
+                target={[0, 0, 0]}
+              />
+              {/* Back light */}
+              <Lightformer
+                intensity={2}
+                position={[0, 4, -10]}
+                scale={[10, 2, 1]}
+                target={[0, 0, 0]}
+              />
+              {/* Front fill */}
+              <Lightformer
+                intensity={0.6}
+                position={[0, 3, 10]}
+                scale={[10, 2, 1]}
+                target={[0, 0, 0]}
+              />
+              <EdgeGlow />
+            </Environment>
+            <directionalLight position={[6, 10, 4]} intensity={0.8} />
+
+            <ScrollTracker />
+            <Machine />
+            {DEBUG ? (
+              <>
+                <OrbitControls makeDefault />
+                <CameraReadout />
+              </>
+            ) : (
+              <CameraRig />
+            )}
+          </Suspense>
         </Canvas>
       </div>
 
