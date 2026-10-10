@@ -10,10 +10,9 @@ import {
   OrbitControls,
   Lightformer,
 } from "@react-three/drei";
-import { HeroWord } from "@/components/Hero";
-import heroStyles from "@/components/Hero.module.css";
-import ScrollRevealText from "@/components/ScrollRevealText";
-
+import { HeroWord } from "./component/Hero";
+import heroStyles from "./component/Hero.module.css";
+import ScrollRevealText from "./component/ScrollRevealText";
 const DEBUG = false;
 const MODEL_PATH = "/models/modelwithlogo.glb";
 const MODEL_SIZE = 8;
