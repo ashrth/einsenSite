@@ -1,6 +1,6 @@
 .footer {
   position: relative;
-  z-index: 1; /* sits above the fixed 3D scene */
+  z-index: 4; /* sits above the fixed 3D scene */
   height: 28vh;
   min-height: 220px;
   overflow: hidden;

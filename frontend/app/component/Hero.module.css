@@ -1,0 +1,74 @@
+/* Giant glass brand name behind the machine */
+.wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  padding-top: 14vh;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 90%);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 90%);
+}
+
+.word {
+  margin: 0;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 200;
+  font-size: 34vw; /* size of the brand name */
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* Each letter: glassy fill + thin edge, rises in on load */
+.word span {
+  display: inline-block;
+  color: transparent;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 85%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transform: translateY(8%);
+  filter: blur(12px);
+  animation: rise 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+/* Join the waitlist button */
+.button {
+  pointer-events: auto;
+  padding: 14px 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  text-decoration: none;
+  font: 400 15px/1 var(--font-display), system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  transition: background 0.3s, color 0.3s;
+}
+
+.button:hover {
+  background: #fff;
+  color: #000;
+}
