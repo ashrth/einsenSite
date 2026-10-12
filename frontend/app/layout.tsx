@@ -37,6 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Header />
         {children}
         <Footer />
+        <WaitlistModal />
       </body>
     </html>
   );
