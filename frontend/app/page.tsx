@@ -15,13 +15,13 @@ import WaitlistSection from "./component/WaitlistSection";
 import { HeroWord } from "./component/Hero";
 import heroStyles from "./component/Hero.module.css";
 import ScrollRevealText from "./component/ScrollRevealText";
+import WaitlistButton from "./component/WaitlistButton";
 
 // ---- Mobile ----
 const MOBILE_BP = 768; // screens narrower than this count as mobile
 const REF_ASPECT = 1.4; // screens narrower (relative to height) than this get zoomed out
 const MAX_ZOOM_OUT = 2.2; // how far the camera can pull back on very narrow screens
 const MOBILE_OFFSET_Y = 0.12; // on mobile, lifts the machine up, leaving room for text below
-
 
 function useIsMobile() {
   const [m, setM] = useState(false);
@@ -470,7 +470,6 @@ function EdgeGlow() {
 }
 
 export default function Home() {
-
   const isMobile = useIsMobile();
   useEffect(() => {
     if (DEBUG) return;
@@ -637,9 +636,7 @@ export default function Home() {
                     justifyContent: "center",
                   }}
                 >
-                  <a href="#waitlist" data-fade className={heroStyles.button}>
-                    Join the waitlist
-                  </a>
+                  <WaitlistButton data-fade />
                 </div>
               </section>
             ) : (
