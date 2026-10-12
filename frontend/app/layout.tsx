@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "./component/Header";
 import Footer from "./component/Footer";
 import { Inter_Tight } from "next/font/google";
+import WaitlistModal from "./component/WaitlistModal";
 
 const display = Inter_Tight({
   subsets: ["latin"],
