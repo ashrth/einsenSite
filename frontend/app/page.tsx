@@ -30,6 +30,8 @@ const LED_BRIGHTNESS = 6;
 const GLOW_VIEW = 3; // which STOPS line it shows on (3 = bird's-eye)
 const GLOW_BRIGHTNESS = 4; // brightness of the outline
 const GLOW_SPEED = 0.8; // speed of the travelling highlight
+const HALO_STRENGTH = 1; // brightness of the light pool under the machine
+const HALO_SIZE = 2.2; // size, relative to the machine
 
 // Text fades out as it scrolls up toward the header (pixels from top of screen)
 const FADE_START = 280; // starts fading here
@@ -109,6 +111,12 @@ const SECTIONS = [
 ];
 const SMOOTHING = 5;
 
+// Ease with a small overshoot at the end. s = how much it overshoots.
+const backOut = (k: number, s: number) => {
+  const c3 = s + 1;
+  return 1 + c3 * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
+};
+
 // Each line moves one part from CLOSED to its Blender (open) position.
 // at: scroll range when it opens [start, end]. Sections are at 0, 0.33, 0.67, 1.
 const MOVES: {
@@ -117,27 +125,31 @@ const MOVES: {
   axis: "x" | "y" | "z";
   amount: number;
   at: [number, number];
+  settle?: number; // overshoot amount; leave out for none
 }[] = [
   {
     name: "B_Plate001",
     type: "slide",
     axis: "z",
     amount: -0.185,
-    at: [0.6, 0.8],
+    at: [0.6, 0.75],
+    settle: 0.8,
   },
   {
     name: "Grapple_Left001",
     type: "slide",
     axis: "z",
     amount: -0.145,
-    at: [0.6, 0.8],
+    at: [0.66, 0.8],
+    settle: 0.8,
   },
   {
     name: "Grapple_Right001",
     type: "slide",
     axis: "z",
     amount: -0.145,
-    at: [0.6, 0.8],
+    at: [0.66, 0.8],
+    settle: 0.8,
   },
 ];
 
@@ -166,12 +178,29 @@ function ScrollTracker() {
 function Machine() {
   const { scene } = useGLTF(MODEL_PATH);
 
-  const scale = useMemo(() => {
+  const { scale, height } = useMemo(() => {
     const size = new THREE.Box3()
       .setFromObject(scene)
       .getSize(new THREE.Vector3());
-    return MODEL_SIZE / Math.max(size.x, size.y, size.z);
+    const s = MODEL_SIZE / Math.max(size.x, size.y, size.z);
+    return { scale: s, height: size.y * s };
   }, [scene]);
+
+  // Soft round glow texture for the floor
+  const halo = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const g = c.getContext("2d")!;
+    const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    grd.addColorStop(0, "rgba(255,255,255,0.35)");
+    grd.addColorStop(0.5, "rgba(255,255,255,0.08)");
+    grd.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
 
   // Make every surface reflect the studio lights more strongly
   useEffect(() => {
@@ -264,7 +293,8 @@ function Machine() {
       obj.position.copy(obj.userData.startPos);
       obj.rotation.copy(obj.userData.startRot);
       for (const m of moves) {
-        const closed = 1 - smooth(range(p, m.at));
+        const k = smooth(range(p, m.at));
+        const closed = 1 - (m.settle ? backOut(k, m.settle) : k);
         if (m.type === "slide") obj.position[m.axis] += m.amount * closed;
         else
           obj.rotation[m.axis] += THREE.MathUtils.degToRad(m.amount) * closed;
@@ -273,9 +303,28 @@ function Machine() {
   });
 
   return (
-    <Center>
-      <primitive object={scene} scale={scale} />
-    </Center>
+    <>
+      <Center>
+        <primitive object={scene} scale={scale} />
+      </Center>
+      {/* Light pool under the machine */}
+      <mesh
+        rotation-x={-Math.PI / 2}
+        position={[0, -height / 2 - 0.002, 0]}
+        renderOrder={-1}
+      >
+        <planeGeometry
+          args={[MODEL_SIZE * HALO_SIZE, MODEL_SIZE * HALO_SIZE * 0.6]}
+        />
+        <meshBasicMaterial
+          map={halo}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+          opacity={HALO_STRENGTH}
+        />
+      </mesh>
+    </>
   );
 }
 
@@ -461,13 +510,15 @@ export default function Home() {
               {/* Blender World: dark grey surrounding */}
               <color attach="background" args={["#2a2a2a"]} />
               {/* Blender Area light: one big soft panel above the machine */}
-              <Lightformer
-                form="rect"
-                intensity={8}
-                position={[0.09, 2.2, -0.5]}
-                scale={[1.86, 1.86, 1]}
-                target={[0, 0, 0]}
-              />
+              <group rotation-y={Math.PI / 5}>
+                <Lightformer
+                  form="rect"
+                  intensity={8}
+                  position={[0.09, 2.2, -0.5]}
+                  scale={[4, 0.9, 1]}
+                  target={[0, 0, 0]}
+                />
+              </group>
               {/* Faint edge strips so the black body separates from the black page */}
               <Lightformer
                 intensity={1.5}
