@@ -3,3 +3,4 @@
 2026-10-07 third deploy with text fading
 2026-10-10 fourth deploy with hero, text effect, better ui, etc
 2026-10-10 fifth deploy with sliced footer section
+2026-10-12 better light and angle
