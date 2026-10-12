@@ -36,7 +36,7 @@ const FADE_START = 280; // starts fading here
 const FADE_END = 110; // fully gone here (just below the header)
 
 // How strongly the machine reflects light. Higher = more visible on black.
-const ENV_INTENSITY = 2;
+const ENV_INTENSITY = 1;
 
 // Camera always looks at the machine's center.
 // pos: where the camera stands (pick in DEBUG mode)
@@ -122,21 +122,21 @@ const MOVES: {
     name: "B_Plate001",
     type: "slide",
     axis: "z",
-    amount: -0.25,
+    amount: -0.185,
     at: [0.6, 0.8],
   },
   {
     name: "Grapple_Left001",
     type: "slide",
     axis: "z",
-    amount: -0.25,
+    amount: -0.145,
     at: [0.6, 0.8],
   },
   {
     name: "Grapple_Right001",
     type: "slide",
     axis: "z",
-    amount: -0.25,
+    amount: -0.145,
     at: [0.6, 0.8],
   },
 ];
@@ -452,46 +452,37 @@ export default function Home() {
           pointerEvents: DEBUG ? "auto" : "none",
         }}
       >
-        <Canvas camera={{ position: [5, 1, 0], fov: FOV }}>
+        <Canvas
+          camera={{ position: [5, 1, 0], fov: FOV }}
+          gl={{ toneMapping: THREE.AgXToneMapping, toneMappingExposure: 1 }}
+        >
           <Suspense fallback={null}>
             <Environment resolution={256} frames={Infinity}>
-              {/* Rim strips: outline the edges */}
+              {/* Blender World: dark grey surrounding */}
+              <color attach="background" args={["#2a2a2a"]} />
+              {/* Blender Area light: one big soft panel above the machine */}
               <Lightformer
-                intensity={6}
-                position={[-10, 3, 0]}
-                scale={[8, 0.8, 1]}
+                form="rect"
+                intensity={8}
+                position={[0.09, 2.2, -0.5]}
+                scale={[1.86, 1.86, 1]}
+                target={[0, 0, 0]}
+              />
+              {/* Faint edge strips so the black body separates from the black page */}
+              <Lightformer
+                intensity={1.5}
+                position={[-10, 2, 0]}
+                scale={[8, 0.6, 1]}
                 target={[0, 0, 0]}
               />
               <Lightformer
-                intensity={6}
-                position={[10, 3, 0]}
-                scale={[8, 0.8, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Top softbox */}
-              <Lightformer
-                intensity={2.5}
-                position={[0, 10, 0]}
-                scale={[10, 4, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Back light */}
-              <Lightformer
-                intensity={2}
-                position={[0, 4, -10]}
-                scale={[10, 2, 1]}
-                target={[0, 0, 0]}
-              />
-              {/* Front fill */}
-              <Lightformer
-                intensity={0.6}
-                position={[0, 3, 10]}
-                scale={[10, 2, 1]}
+                intensity={1.5}
+                position={[10, 2, 0]}
+                scale={[8, 0.6, 1]}
                 target={[0, 0, 0]}
               />
               <EdgeGlow />
             </Environment>
-            <directionalLight position={[6, 10, 4]} intensity={0.8} />
 
             <ScrollTracker />
             <Machine />
