@@ -16,7 +16,7 @@ import { HeroWord } from "./component/Hero";
 import heroStyles from "./component/Hero.module.css";
 import ScrollRevealText from "./component/ScrollRevealText";
 const DEBUG = false;
-const MODEL_PATH = "/models/modelwithlogo.glb";
+const MODEL_PATH = "/models/model.glb";
 const MODEL_SIZE = 8;
 
 // Zoom: smaller = more zoomed in (try 25–35)
