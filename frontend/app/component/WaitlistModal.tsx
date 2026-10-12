@@ -20,7 +20,14 @@ const COUNTRY_CODES = (
   "PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL " +
   "TM TN TO TR TT TV TW TZ UA UG US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW"
 ).split(" ");
-function CountrySelect() {
+
+function CountryPicker({
+  error,
+  onPick,
+}: {
+  error: boolean;
+  onPick: () => void;
+}) {
   const list = useMemo(() => {
     const names = new Intl.DisplayNames(["en"], { type: "region" });
     return COUNTRY_CODES.map((code) => names.of(code) ?? code).sort((a, b) =>
@@ -28,17 +35,77 @@ function CountrySelect() {
     );
   }, []);
 
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    searchRef.current?.focus();
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = list.filter((n) => n.toLowerCase().includes(q));
+
+  const pick = (name: string) => {
+    setValue(name);
+    setOpen(false);
+    setQuery("");
+    onPick();
+  };
+
   return (
-    <select name="country" required defaultValue="" aria-label="Your country">
-      <option value="" disabled>
-        Your country
-      </option>
-      {list.map((name) => (
-        <option key={name} value={name}>
-          {name}
-        </option>
-      ))}
-    </select>
+    <div ref={wrapRef} className={styles.picker}>
+      <input type="hidden" name="country" value={value} />
+      <button
+        type="button"
+        className={`${styles.pickerButton} ${value ? "" : styles.placeholder} ${error ? styles.error : ""}`}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {value || "Your country"}
+      </button>
+
+      {open && (
+        <div className={styles.panel}>
+          <input
+            ref={searchRef}
+            className={styles.search}
+            placeholder="Search…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setOpen(false);
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (filtered[0]) pick(filtered[0]);
+              }
+            }}
+          />
+          <ul className={styles.options}>
+            {filtered.map((n) => (
+              <li
+                key={n}
+                className={n === value ? styles.selected : ""}
+                onClick={() => pick(n)}
+              >
+                {n}
+              </li>
+            ))}
+            {!filtered.length && <li className={styles.empty}>No matches</li>}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -46,6 +113,7 @@ export default function WaitlistModal() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "done">("idle");
   const cardRef = useRef<HTMLDivElement>(null);
+  const [countryError, setCountryError] = useState(false);
 
   // Listen for "open" requests from the buttons
   useEffect(() => {
@@ -91,6 +159,10 @@ export default function WaitlistModal() {
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget));
+    if (!data.country) {
+      setCountryError(true);
+      return;
+    }
     setStatus("sending");
     // TODO: save to Supabase. For now it's only logged.
     console.log("Waitlist signup:", data);
@@ -154,7 +226,10 @@ export default function WaitlistModal() {
                 autoComplete="email"
                 required
               />
-              <CountrySelect />
+              <CountryPicker
+                error={countryError}
+                onPick={() => setCountryError(false)}
+              />
               <label className={styles.switch}>
                 <span>Send me product updates</span>
                 <input type="checkbox" name="updates" defaultChecked />

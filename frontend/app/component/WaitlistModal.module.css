@@ -104,7 +104,7 @@
 }
 
 .form input:not([type="checkbox"]),
-.form select {
+.pickerButton {
   width: 100%;
   box-sizing: border-box;
   padding: 13px 16px;
@@ -221,9 +221,12 @@
   }
 }
 
-.form select {
-  appearance: none;
-  -webkit-appearance: none;
+.picker {
+  position: relative;
+}
+
+.pickerButton {
+  text-align: left;
   cursor: pointer;
   padding-right: 40px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='white' stroke-opacity='0.6' stroke-width='1.5'/%3E%3C/svg%3E");
@@ -231,16 +234,65 @@
   background-position: right 16px center;
 }
 
-.form select:invalid {
-  color: rgba(
-    245,
-    245,
-    247,
-    0.45
-  ); /* placeholder look until a country is picked */
+.placeholder {
+  color: rgba(245, 245, 247, 0.45);
 }
 
-.form select option {
-  background: #141418;
-  color: #f5f5f7;
+.error {
+  border-color: rgba(255, 120, 120, 0.7);
+}
+
+/* The dropdown list */
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(20, 20, 26, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.form input.search {
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px; /* height of the list */
+  overflow-y: auto;
+}
+
+.options li {
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: rgba(245, 245, 247, 0.85);
+  cursor: pointer;
+}
+
+.options li:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.options li.selected {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.options li.empty {
+  color: rgba(245, 245, 247, 0.45);
+  cursor: default;
+}
+
+.options li.empty:hover {
+  background: none;
 }
