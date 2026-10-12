@@ -57,3 +57,15 @@
 .copy {
   color: rgba(255, 255, 255, 0.7);
 }
+
+@media (max-width: 768px) {
+  .link,
+  .copy {
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    margin-right: -0.25em;
+  }
+  .links {
+    gap: 28px;
+  }
+}

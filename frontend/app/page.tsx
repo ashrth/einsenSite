@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -15,6 +15,26 @@ import WaitlistSection from "./component/WaitlistSection";
 import { HeroWord } from "./component/Hero";
 import heroStyles from "./component/Hero.module.css";
 import ScrollRevealText from "./component/ScrollRevealText";
+
+// ---- Mobile ----
+const MOBILE_BP = 768; // screens narrower than this count as mobile
+const REF_ASPECT = 1.4; // screens narrower (relative to height) than this get zoomed out
+const MAX_ZOOM_OUT = 2.2; // how far the camera can pull back on very narrow screens
+const MOBILE_OFFSET_Y = 0.12; // on mobile, lifts the machine up, leaving room for text below
+
+
+function useIsMobile() {
+  const [m, setM] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia(`(max-width: ${MOBILE_BP}px)`);
+    const on = () => setM(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return m;
+}
+
 const DEBUG = false;
 const MODEL_PATH = "/models/model.glb";
 const MODEL_SIZE = 8;
@@ -361,15 +381,22 @@ function CameraRig() {
     );
     target.lerpVectors(a.target, b.target, e);
 
+    // Pull the camera back on narrow screens so the machine fits
+    const aspect = size.width / size.height;
+    sph.radius *= Math.min(Math.max(REF_ASPECT / aspect, 1), MAX_ZOOM_OUT);
+
     camera.position.setFromSpherical(sph).add(target);
     camera.lookAt(target);
 
-    const offsetX = THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
+    // Desktop: machine shifts left/right beside the text. Mobile: centered and lifted up.
+    const mobile = size.width < MOBILE_BP;
+    const offsetX = mobile ? 0 : THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
+    const offsetY = mobile ? MOBILE_OFFSET_Y : 0;
     (camera as THREE.PerspectiveCamera).setViewOffset(
       size.width,
       size.height,
       offsetX * size.width,
-      0,
+      offsetY * size.height,
       size.width,
       size.height,
     );
@@ -443,6 +470,8 @@ function EdgeGlow() {
 }
 
 export default function Home() {
+
+  const isMobile = useIsMobile();
   useEffect(() => {
     if (DEBUG) return;
     const blocks = Array.from(
@@ -503,10 +532,11 @@ export default function Home() {
       >
         <Canvas
           camera={{ position: [5, 1, 0], fov: FOV }}
+          dpr={isMobile ? [1, 1.5] : [1, 2]}
           gl={{ toneMapping: THREE.AgXToneMapping, toneMappingExposure: 1 }}
         >
           <Suspense fallback={null}>
-            <Environment resolution={256} frames={Infinity}>
+            <Environment resolution={256} frames={isMobile ? 1 : Infinity}>
               {/* Blender World: dark grey surrounding */}
               <color attach="background" args={["#2a2a2a"]} />
               {/* Blender Area light: one big soft panel above the machine */}
@@ -579,7 +609,7 @@ export default function Home() {
                   height: "100vh",
                   display: "flex",
                   alignItems: "flex-end",
-                  justifyContent: "space-between",
+                  justifyContent: isMobile ? "center" : "space-between",
                   padding: "0 6vw 18vh",
                   boxSizing: "border-box",
                 }}
@@ -602,7 +632,7 @@ export default function Home() {
                     position: "absolute",
                     left: 0,
                     right: 0,
-                    bottom: "33vh",
+                    bottom: isMobile ? "26vh" : "33vh",
                     display: "flex",
                     justifyContent: "center",
                   }}
@@ -618,9 +648,13 @@ export default function Home() {
                 style={{
                   height: "100vh",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: i % 2 === 0 ? "flex-start" : "flex-end",
-                  padding: "25vh 6vw 0",
+                  alignItems: isMobile ? "flex-end" : "center",
+                  justifyContent: isMobile
+                    ? "flex-start"
+                    : i % 2 === 0
+                      ? "flex-start"
+                      : "flex-end",
+                  padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
                   boxSizing: "border-box",
                 }}
               >
