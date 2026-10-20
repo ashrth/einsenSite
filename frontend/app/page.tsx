@@ -13,7 +13,6 @@ import {
 import ChoppedText from "./component/ChoppedText";
 import WaitlistSection from "./component/WaitlistSection";
 import { HeroWord } from "./component/Hero";
-import heroStyles from "./component/Hero.module.css";
 import ScrollRevealText from "./component/ScrollRevealText";
 import WaitlistButton from "./component/WaitlistButton";
 
@@ -42,15 +41,59 @@ const MODEL_SIZE = 8;
 // Zoom: smaller = more zoomed in (try 25–35)
 const FOV = 30;
 
-const ANIM_AT: [number, number] = [0.55, 1]; // scroll range that plays it (0 = top, 1 = bottom)
+const ANIM_AT: [number, number] = [0.52, 0.75]; // scroll range that plays it (0 = top, 1 = bottom)
 const ANIM_LENGTH = 15;
 
+// ---- Blender studio lights (from File 2) ----
+// Positions and directions are Blender's own numbers (x, y, z), converted in code.
+const BLENDER_LIGHTS = [
+  {
+    name: "Area.004 (main)",
+    pos: [-13.225, 3.233, 3.502],
+    dir: [1.239, 0.715, 0.753],
+    size: 3.65,
+    intensity: 7,
+  },
+  {
+    name: "Area.005",
+    pos: [-0.23, 0.321, 0.903],
+    dir: [0.841, 0.503, -0.201],
+    size: 0.652,
+    intensity: 3.9,
+  },
+  {
+    name: "Area.003",
+    pos: [0.138, -0.935, 0.903],
+    dir: [0.841, 0.503, -0.201],
+    size: 1.139,
+    intensity: 0.9,
+  },
+  {
+    name: "Area.002",
+    pos: [0.63, -0.13, 0.151],
+    dir: [-0.667, 0.686, -0.291],
+    size: 0.463,
+    intensity: 0.9,
+  },
+];
+const LIGHT_BOOST = 1; // brightens or dims all studio lights together
+const WORLD_COLOR = "#404040"; // Blender World color
+const MODEL_CENTER = new THREE.Vector3(-0.002, 0.0655, 0.061); // machine center in the file (meters)
+const MODEL_WIDTH = 0.75; // machine width in the file (meters)
+
+// Blender (Z up) → website (Y up), scaled the same way as the model
+function blenderToWeb([x, y, z]: number[]) {
+  return new THREE.Vector3(x, z, -y)
+    .sub(MODEL_CENTER)
+    .multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
+}
+
 const LED_NAME = "LED_EN_OG_4mm";
-const LED_VIEW = 3; // which STOPS line it shows on (0 = first). 3 = bird's-eye
+const LED_VIEW = 2; // which STOPS line it shows on (0 = first). 3 = bird's-eye
 const LED_SPEED = 1.5; // how fast it travels around
 const LED_LENGTH = 40; // higher = shorter light streak
 const LED_BRIGHTNESS = 6;
-const GLOW_VIEW = 3; // which STOPS line it shows on (3 = bird's-eye)
+const GLOW_VIEW = 2; // which STOPS line it shows on (3 = bird's-eye)
 const GLOW_BRIGHTNESS = 4; // brightness of the outline
 const GLOW_SPEED = 0.8; // speed of the travelling highlight
 const HALO_STRENGTH = 1; // brightness of the light pool under the machine
@@ -68,23 +111,18 @@ const ENV_INTENSITY = 1;
 // offsetX: shifts the machine on screen. Negative = machine on the right, positive = on the left.
 const STOPS = [
   {
+    name: "Logo",
+    pos: new THREE.Vector3(-0.1, 1.74, 9.78),
+    target: new THREE.Vector3(0, 0, 0),
+    offsetX: 0,
+    offsetY: 0.48,
+  },
+  {
     name: "Overview",
     pos: new THREE.Vector3(5.41, 5.03, 9.29),
     target: new THREE.Vector3(-3.99, 1.43, -1.17),
-    offsetX: 0,
-  },
-  {
-    name: "Power button",
-    pos: new THREE.Vector3(-2.03, 2.13, 6.53),
-    target: new THREE.Vector3(2.32, 1.68, 0.68),
-    offsetX: 0,
-  },
-
-  {
-    name: "Logo",
-    pos: new THREE.Vector3(0.2, 0.77, 6.81),
-    target: new THREE.Vector3(0.39, 1.65, 0.61),
-    offsetX: 0,
+    offsetX: -0.18,
+    offsetY: 0,
   },
 
   {
@@ -92,18 +130,21 @@ const STOPS = [
     pos: new THREE.Vector3(0, 14, 0.5),
     target: new THREE.Vector3(0, 0, 0),
     offsetX: 0.18,
+    offsetY: 0,
   },
   {
     name: "Plate out",
     pos: new THREE.Vector3(0, 13, 3),
     target: new THREE.Vector3(0, 0, 0),
     offsetX: -0.18,
+    offsetY: 0,
   },
   {
     name: "Front",
     pos: new THREE.Vector3(0, 2, 14),
     target: new THREE.Vector3(0, 0, 0),
     offsetX: 0.18,
+    offsetY: 0,
   },
 ];
 
@@ -114,22 +155,23 @@ const SECTIONS = [
   {
     label: "Power",
     text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
+    side: "left",
   },
-  {
-    label: "Identity",
-    text: "Designed to sit quietly in your home, built to do the work you never wanted to.",
-  },
+
   {
     label: "Footprint",
     text: "Compact from above. Fits on a shelf, a counter or a laundry room corner.",
+    side: "right",
   },
   {
     label: "Loading",
     text: "The plate slides out. Lay your shirt down and let the machine take over.",
+    side: "left",
   },
   {
     label: "Front",
     text: "Every detail engineered for one job: crisp, wrinkle-free clothes in minutes.",
+    side: "right",
   },
 ];
 const SMOOTHING = 5;
@@ -201,15 +243,16 @@ function Machine() {
   }, [scene]);
 
   // Blender's animations, ready to be scrubbed by the scroll
-  const mixer = useMemo(() => {
+  const { mixer, actions } = useMemo(() => {
     const m = new THREE.AnimationMixer(scene);
-    for (const clip of animations) {
+    const list = animations.map((clip) => {
       const action = m.clipAction(clip);
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
       action.play();
-    }
-    return m;
+      return action;
+    });
+    return { mixer: m, actions: list };
   }, [scene, animations]);
 
   const led = useMemo(() => {
@@ -266,8 +309,14 @@ function Machine() {
       const dist = Math.abs(scrollState.progress - viewAt);
       led.uStrength.value = Math.max(0, 1 - dist / 0.1);
     }
-    const p = scrollState.progress;
-    mixer.setTime(range(p, ANIM_AT) * ANIM_LENGTH);
+    // Set each part's animation to the moment matching the scroll
+    const t = range(scrollState.progress, ANIM_AT) * ANIM_LENGTH;
+    for (const a of actions) {
+      a.enabled = true;
+      a.paused = false;
+      a.time = Math.min(t, a.getClip().duration);
+    }
+    mixer.update(0);
   });
 
   return (
@@ -304,6 +353,7 @@ function CameraRig() {
         target: s.target,
         sph: new THREE.Spherical().setFromVector3(s.pos.clone().sub(s.target)),
         offsetX: s.offsetX,
+        offsetY: s.offsetY,
       })),
     [],
   );
@@ -339,7 +389,9 @@ function CameraRig() {
     // Desktop: machine shifts left/right beside the text. Mobile: centered and lifted up.
     const mobile = size.width < MOBILE_BP;
     const offsetX = mobile ? 0 : THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
-    const offsetY = mobile ? MOBILE_OFFSET_Y : 0;
+    const offsetY =
+      (mobile ? MOBILE_OFFSET_Y : 0) -
+      THREE.MathUtils.lerp(a.offsetY, b.offsetY, e);
     (camera as THREE.PerspectiveCamera).setViewOffset(
       size.width,
       size.height,
@@ -417,6 +469,30 @@ function EdgeGlow() {
   );
 }
 
+function StudioLights() {
+  const k = MODEL_SIZE / MODEL_WIDTH;
+  return (
+    <>
+      {BLENDER_LIGHTS.map((l) => {
+        const p = blenderToWeb(l.pos);
+        const [dx, dy, dz] = l.dir;
+        const d = new THREE.Vector3(dx, dz, -dy).normalize();
+        const target = p.clone().add(d);
+        return (
+          <Lightformer
+            key={l.name}
+            form="rect"
+            intensity={l.intensity * LIGHT_BOOST}
+            position={p.toArray()}
+            scale={[l.size * k, l.size * k, 1]}
+            target={target.toArray()}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 export default function Home() {
   const isMobile = useIsMobile();
   useEffect(() => {
@@ -484,27 +560,19 @@ export default function Home() {
         >
           <Suspense fallback={null}>
             <Environment resolution={256} frames={isMobile ? 1 : Infinity}>
-              {/* Blender World: dark grey surrounding */}
-              <color attach="background" args={["#2a2a2a"]} />
-              {/* Blender Area light: one big soft panel above the machine */}
-              <group rotation-y={Math.PI / 5}>
-                <Lightformer
-                  form="rect"
-                  intensity={8}
-                  position={[0.09, 2.2, -0.5]}
-                  scale={[4, 0.9, 1]}
-                  target={[0, 0, 0]}
-                />
-              </group>
-              {/* Faint edge strips so the black body separates from the black page */}
+              {/* Blender World */}
+              <color attach="background" args={[WORLD_COLOR]} />
+              {/* Blender's 4 studio lights */}
+              <StudioLights />
+              {/* Not in Blender: faint edge strips so the black body separates from the black page */}
               <Lightformer
-                intensity={1.5}
+                intensity={3}
                 position={[-10, 2, 0]}
                 scale={[8, 0.6, 1]}
                 target={[0, 0, 0]}
               />
               <Lightformer
-                intensity={1.5}
+                intensity={3}
                 position={[10, 2, 0]}
                 scale={[8, 0.6, 1]}
                 target={[0, 0, 0]}
@@ -557,7 +625,7 @@ export default function Home() {
                   display: "flex",
                   alignItems: "flex-end",
                   justifyContent: isMobile ? "center" : "space-between",
-                  padding: "0 6vw 18vh",
+                  padding: "0 6vw 20vh",
                   boxSizing: "border-box",
                 }}
               >
@@ -579,7 +647,7 @@ export default function Home() {
                     position: "absolute",
                     left: 0,
                     right: 0,
-                    bottom: isMobile ? "26vh" : "33vh",
+                    bottom: isMobile ? "26vh" : "28vh",
                     display: "flex",
                     justifyContent: "center",
                   }}
@@ -596,9 +664,9 @@ export default function Home() {
                   alignItems: isMobile ? "flex-end" : "center",
                   justifyContent: isMobile
                     ? "flex-start"
-                    : i % 2 === 0
-                      ? "flex-start"
-                      : "flex-end",
+                    : s.side === "right"
+                      ? "flex-end"
+                      : "flex-start",
                   padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
                   boxSizing: "border-box",
                 }}
