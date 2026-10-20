@@ -36,11 +36,14 @@ function useIsMobile() {
 }
 
 const DEBUG = false;
-const MODEL_PATH = "/models/model.glb";
+const MODEL_PATH = "/models/model2.glb";
 const MODEL_SIZE = 8;
 
 // Zoom: smaller = more zoomed in (try 25–35)
 const FOV = 30;
+
+const ANIM_AT: [number, number] = [0.55, 1]; // scroll range that plays it (0 = top, 1 = bottom)
+const ANIM_LENGTH = 15;
 
 const LED_NAME = "LED_EN_OG_4mm";
 const LED_VIEW = 3; // which STOPS line it shows on (0 = first). 3 = bird's-eye
@@ -131,48 +134,6 @@ const SECTIONS = [
 ];
 const SMOOTHING = 5;
 
-// Ease with a small overshoot at the end. s = how much it overshoots.
-const backOut = (k: number, s: number) => {
-  const c3 = s + 1;
-  return 1 + c3 * Math.pow(k - 1, 3) + s * Math.pow(k - 1, 2);
-};
-
-// Each line moves one part from CLOSED to its Blender (open) position.
-// at: scroll range when it opens [start, end]. Sections are at 0, 0.33, 0.67, 1.
-const MOVES: {
-  name: string;
-  type: "slide" | "rotate";
-  axis: "x" | "y" | "z";
-  amount: number;
-  at: [number, number];
-  settle?: number; // overshoot amount; leave out for none
-}[] = [
-  {
-    name: "B_Plate001",
-    type: "slide",
-    axis: "z",
-    amount: -0.185,
-    at: [0.6, 0.75],
-    settle: 0.8,
-  },
-  {
-    name: "Grapple_Left001",
-    type: "slide",
-    axis: "z",
-    amount: -0.145,
-    at: [0.66, 0.8],
-    settle: 0.8,
-  },
-  {
-    name: "Grapple_Right001",
-    type: "slide",
-    axis: "z",
-    amount: -0.145,
-    at: [0.66, 0.8],
-    settle: 0.8,
-  },
-];
-
 const scrollState = { progress: 0 };
 
 const range = (p: number, [a, b]: [number, number]) =>
@@ -196,7 +157,7 @@ function ScrollTracker() {
 }
 
 function Machine() {
-  const { scene } = useGLTF(MODEL_PATH);
+  const { scene, animations } = useGLTF(MODEL_PATH);
 
   const { scale, height } = useMemo(() => {
     const size = new THREE.Box3()
@@ -239,20 +200,17 @@ function Machine() {
     });
   }, [scene]);
 
-  const parts = useMemo(() => {
-    const map = new Map<THREE.Object3D, typeof MOVES>();
-    for (const m of MOVES) {
-      const obj = scene.getObjectByName(m.name);
-      if (!obj) {
-        console.warn(`Part not found: "${m.name}"`);
-        continue;
-      }
-      if (!obj.userData.startPos) obj.userData.startPos = obj.position.clone();
-      if (!obj.userData.startRot) obj.userData.startRot = obj.rotation.clone();
-      map.set(obj, [...(map.get(obj) ?? []), m]);
+  // Blender's animations, ready to be scrubbed by the scroll
+  const mixer = useMemo(() => {
+    const m = new THREE.AnimationMixer(scene);
+    for (const clip of animations) {
+      const action = m.clipAction(clip);
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.play();
     }
-    return [...map.entries()];
-  }, [scene]);
+    return m;
+  }, [scene, animations]);
 
   const led = useMemo(() => {
     const root = scene.getObjectByName(LED_NAME);
@@ -309,17 +267,7 @@ function Machine() {
       led.uStrength.value = Math.max(0, 1 - dist / 0.1);
     }
     const p = scrollState.progress;
-    for (const [obj, moves] of parts) {
-      obj.position.copy(obj.userData.startPos);
-      obj.rotation.copy(obj.userData.startRot);
-      for (const m of moves) {
-        const k = smooth(range(p, m.at));
-        const closed = 1 - (m.settle ? backOut(k, m.settle) : k);
-        if (m.type === "slide") obj.position[m.axis] += m.amount * closed;
-        else
-          obj.rotation[m.axis] += THREE.MathUtils.degToRad(m.amount) * closed;
-      }
-    }
+    mixer.setTime(range(p, ANIM_AT) * ANIM_LENGTH);
   });
 
   return (
