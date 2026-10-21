@@ -41,8 +41,9 @@ const MODEL_SIZE = 8;
 // Zoom: smaller = more zoomed in (try 25–35)
 const FOV = 30;
 
-const ANIM_AT: [number, number] = [0.52, 0.75]; // scroll range that plays it (0 = top, 1 = bottom)
-const ANIM_LENGTH = 15;
+const ANIM_STOP = 3;
+const ANIM_SPEED = 1; // 1 = Blender speed, 2 = twice as fast
+const ANIM_END = 10; // seconds: everything has finished moving by 10s
 
 // ---- Blender studio lights (from File 2) ----
 // Positions and directions are Blender's own numbers (x, y, z), converted in code.
@@ -133,17 +134,10 @@ const STOPS = [
     offsetY: 0,
   },
   {
-    name: "Plate out",
-    pos: new THREE.Vector3(0, 13, 3),
-    target: new THREE.Vector3(0, 0, 0),
-    offsetX: -0.18,
-    offsetY: 0,
-  },
-  {
-    name: "Front",
-    pos: new THREE.Vector3(0, 2, 14),
-    target: new THREE.Vector3(0, 0, 0),
-    offsetX: 0.18,
+    name: "Side",
+    pos: new THREE.Vector3(14, 3, 3),
+    target: new THREE.Vector3(0, 0, 1.2),
+    offsetX: -0.15,
     offsetY: 0,
   },
 ];
@@ -167,11 +161,6 @@ const SECTIONS = [
     label: "Loading",
     text: "The plate slides out. Lay your shirt down and let the machine take over.",
     side: "left",
-  },
-  {
-    label: "Front",
-    text: "Every detail engineered for one job: crisp, wrinkle-free clothes in minutes.",
-    side: "right",
   },
 ];
 const SMOOTHING = 5;
@@ -243,6 +232,7 @@ function Machine() {
   }, [scene]);
 
   // Blender's animations, ready to be scrubbed by the scroll
+  const animTime = useRef(0);
   const { mixer, actions } = useMemo(() => {
     const m = new THREE.AnimationMixer(scene);
     const list = animations.map((clip) => {
@@ -309,12 +299,19 @@ function Machine() {
       const dist = Math.abs(scrollState.progress - viewAt);
       led.uStrength.value = Math.max(0, 1 - dist / 0.1);
     }
-    // Set each part's animation to the moment matching the scroll
-    const t = range(scrollState.progress, ANIM_AT) * ANIM_LENGTH;
+    // Start only once the camera has (almost) reached that stop
+    const trigger = ANIM_STOP / (STOPS.length - 1) - 0.01;
+    const goal = scrollState.progress >= trigger ? ANIM_END : 0;
+    const step = delta * ANIM_SPEED;
+    animTime.current =
+      goal > animTime.current
+        ? Math.min(goal, animTime.current + step)
+        : Math.max(goal, animTime.current - step * 2);
+
     for (const a of actions) {
       a.enabled = true;
       a.paused = false;
-      a.time = Math.min(t, a.getClip().duration);
+      a.time = Math.min(animTime.current, a.getClip().duration);
     }
     mixer.update(0);
   });
