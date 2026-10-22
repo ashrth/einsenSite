@@ -32,11 +32,11 @@
   color: transparent;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.16) 0%,
-    rgba(255, 255, 255, 0.06) 45%,
-    rgba(255, 255, 255, 0) 85%
+    rgba(0, 0, 0, 0.14) 0%,
+    rgba(0, 0, 0, 0.05) 50%,
+    rgba(0, 0, 0, 0) 85%
   );
-  -webkit-background-clip: text;
+  -webkit-text-stroke: 1px rgba(0, 0, 0, 0.12);
   background-clip: text;
 
   -webkit-text-stroke: 1px rgba(255, 255, 255, 0.14);
@@ -61,10 +61,11 @@
   pointer-events: auto;
   padding: 14px 28px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  color: #fff;
+
   text-decoration: none;
   font:
     400 15px/1 var(--font-display),
@@ -77,6 +78,6 @@
 }
 
 .button:hover {
-  background: #fff;
-  color: #000;
+  background: var(--text);
+  color: var(--bg);
 }

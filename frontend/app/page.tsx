@@ -9,6 +9,7 @@ import {
   Center,
   OrbitControls,
   Lightformer,
+  ContactShadows,
 } from "@react-three/drei";
 import ChoppedText from "./component/ChoppedText";
 import WaitlistSection from "./component/WaitlistSection";
@@ -16,37 +17,104 @@ import { HeroWord } from "./component/Hero";
 import ScrollRevealText from "./component/ScrollRevealText";
 import WaitlistButton from "./component/WaitlistButton";
 
-// ---- Mobile ----
-const MOBILE_BP = 768; // screens narrower than this count as mobile
-const REF_ASPECT = 1.4; // screens narrower (relative to height) than this get zoomed out
-const MAX_ZOOM_OUT = 2.2; // how far the camera can pull back on very narrow screens
-const MOBILE_OFFSET_Y = 0.12; // on mobile, lifts the machine up, leaving room for text below
+// =====================================================================
+// SETTINGS
+// =====================================================================
 
-function useIsMobile() {
-  const [m, setM] = useState(false);
-  useEffect(() => {
-    const q = window.matchMedia(`(max-width: ${MOBILE_BP}px)`);
-    const on = () => setM(q.matches);
-    on();
-    q.addEventListener("change", on);
-    return () => q.removeEventListener("change", on);
-  }, []);
-  return m;
-}
-
+// true = rotate freely and copy camera positions. false = scroll animation.
 const DEBUG = false;
+const DEBUG_OPEN = 1; // in DEBUG mode: 0 = parts closed, 1 = parts open
+
 const MODEL_PATH = "/models/model2.glb";
 const MODEL_SIZE = 8;
+const FOV = 30; // zoom: smaller = more zoomed in
 
-// Zoom: smaller = more zoomed in (try 25–35)
-const FOV = 30;
+// ---- Background: light beige on the left, grey on the right ----
+const BACKGROUND = [
+  // fine grain, like a real surface
+  `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+  // angle: 75deg tilts the split so the grey side is larger at the top, like the reference
+  "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
+].join(", ");
+const BAND_ANGLE = 0.6; // tilt of the light band across the top (0 = straight)
+const COAT = 1; // glossiness of the black body (0 = matte, 1 = piano black)
+const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
-const ANIM_STOP = 3;
-const ANIM_SPEED = 1; // 1 = Blender speed, 2 = twice as fast
-const ANIM_END = 10; // seconds: everything has finished moving by 10s
+// ---- Camera stops, in scroll order ----
+// pos: where the camera stands. target: what it looks at.
+// offsetX: shifts the machine on screen (negative = right, positive = left).
+// offsetY: pushes the machine down on screen (positive = lower).
+const STOPS = [
+  {
+    name: "Hero",
+    pos: new THREE.Vector3(-0.1, 1.74, 9.78),
+    target: new THREE.Vector3(0, 0, 0),
+    offsetX: 0,
+    offsetY: 0.48,
+  },
+  {
+    name: "Plates out (reference image)",
+    pos: new THREE.Vector3(-4.3, 12.5, 6.8),
+    target: new THREE.Vector3(-4.3, 0, 1),
+    offsetX: 0,
+    offsetY: 0.04,
+  },
+  // {
+  //   name: "Bird's-eye",
+  //   pos: new THREE.Vector3(0, 14, 0.5),
+  //   target: new THREE.Vector3(0, 0, 0),
+  //   offsetX: -0.18,
+  //   offsetY: 0,
+  // },
+  {
+    name: "Side (pinned: scroll moves the parts)",
+    pos: new THREE.Vector3(14, 3, 3),
+    target: new THREE.Vector3(0, 0, 1.2),
+    offsetX: -0.15,
+    offsetY: 0,
+  },
+];
+
+// How open the machine is at each stop (0 = closed, 1 = fully open).
+// The LAST stop is pinned: there, scrolling opens it from closed to fully open.
+const OPEN_AT_STOP = [0, 1, 0, 0];
+
+// How much scrolling the pinned last stop takes (in screen heights x 100).
+// Bigger = the parts move slower relative to the scroll.
+const PIN_LENGTH = 300;
+
+// Length of the Blender animation used (seconds): everything has finished moving by 10s
+const ANIM_END = 10;
+
+const FONT = "var(--font-display), system-ui, sans-serif";
+
+// One per stop. side: "left" or "right" (where the text sits).
+const SECTIONS = [
+  { label: "", text: "", side: "left" }, // hero
+  {
+    label: "Ready",
+    text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
+    side: "left",
+  },
+  {
+    label: "Footprint",
+    text: "Compact from above. Fits on a shelf, a counter or a laundry room corner.",
+    side: "left",
+  },
+  {
+    label: "Loading",
+    text: "The door opens, the plates slide out. Lay your shirt down and let the machine take over.",
+    side: "left",
+  },
+];
+
+// ---- Mobile ----
+const MOBILE_BP = 768;
+const REF_ASPECT = 1.4;
+const MAX_ZOOM_OUT = 2.2;
+const MOBILE_OFFSET_Y = 0.12;
 
 // ---- Blender studio lights (from File 2) ----
-// Positions and directions are Blender's own numbers (x, y, z), converted in code.
 const BLENDER_LIGHTS = [
   {
     name: "Area.004 (main)",
@@ -77,10 +145,109 @@ const BLENDER_LIGHTS = [
     intensity: 0.9,
   },
 ];
-const LIGHT_BOOST = 1; // brightens or dims all studio lights together
-const WORLD_COLOR = "#404040"; // Blender World color
-const MODEL_CENTER = new THREE.Vector3(-0.002, 0.0655, 0.061); // machine center in the file (meters)
-const MODEL_WIDTH = 0.75; // machine width in the file (meters)
+const LIGHT_BOOST = 1;
+const WORLD_COLOR = "#404040";
+const MODEL_CENTER = new THREE.Vector3(-0.002, 0.0655, 0.061);
+const MODEL_WIDTH = 0.75;
+const ENV_INTENSITY = 1;
+
+// ---- Light effects on the bird's-eye stop ----
+const LED_NAME = "LED_EN_OG_4mm";
+const LED_STOP = 2; // which stop (0 = first)
+const LED_SPEED = 1.5;
+const LED_LENGTH = 40;
+const LED_BRIGHTNESS = 6;
+const GLOW_STOP = 2;
+const GLOW_BRIGHTNESS = 4;
+const GLOW_SPEED = 0.8;
+
+// ---- Soft shadow under the machine ----
+const SHADOW_OPACITY = 0.5;
+
+// Text fades out as it scrolls up toward the header (pixels from top of screen)
+const FADE_START = 280;
+const FADE_END = 110;
+
+// How quickly the camera and parts follow the scroll
+const SMOOTHING = 5;
+
+// =====================================================================
+// SCROLL
+// =====================================================================
+
+const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+const smooth = (k: number) => k * k * (3 - 2 * k);
+
+// cam: which stop the camera is at (1.5 = halfway between stop 1 and 2)
+// pin: progress through the pinned last stop (0 = start, 1 = parts fully out)
+const scrollState = { cam: 0, pin: 0 };
+
+function readScroll() {
+  const els = Array.from(document.querySelectorAll<HTMLElement>("[data-stop]"));
+  if (!els.length) return { cam: 0, pin: 0 };
+  const y = window.scrollY;
+  const vh = window.innerHeight;
+  const tops = els.map((e) => e.getBoundingClientRect().top + y);
+  const last = els.length - 1;
+
+  // Inside the pinned last section
+  if (y >= tops[last]) {
+    const pinLen = els[last].offsetHeight - vh;
+    return {
+      cam: last,
+      pin: pinLen > 0 ? clamp01((y - tops[last]) / pinLen) : 1,
+    };
+  }
+
+  // Between two stops
+  let i = 0;
+  while (i < last - 1 && y >= tops[i + 1]) i++;
+  return { cam: i + clamp01((y - tops[i]) / (tops[i + 1] - tops[i])), pin: 0 };
+}
+
+function ScrollTracker() {
+  useFrame((_, delta) => {
+    const target = readScroll();
+    const k = 1 - Math.exp(-SMOOTHING * delta);
+    scrollState.cam += (target.cam - scrollState.cam) * k;
+    scrollState.pin += (target.pin - scrollState.pin) * k;
+  });
+  return null;
+}
+
+// How open the machine should be right now (0 = closed, 1 = open)
+function currentOpenAmount() {
+  if (DEBUG) return DEBUG_OPEN;
+  const last = STOPS.length - 1;
+  const { cam, pin } = scrollState;
+  if (cam >= last - 0.001) return pin;
+  const i = Math.min(Math.floor(cam), last - 1);
+  return THREE.MathUtils.lerp(
+    OPEN_AT_STOP[i],
+    OPEN_AT_STOP[i + 1],
+    smooth(cam - i),
+  );
+}
+
+// How strongly an effect tied to a stop should show (1 at that stop, fading out nearby)
+const nearStop = (stop: number) =>
+  Math.max(0, 1 - Math.abs(scrollState.cam - stop) / 0.4);
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+
+function useIsMobile() {
+  const [m, setM] = useState(false);
+  useEffect(() => {
+    const q = window.matchMedia(`(max-width: ${MOBILE_BP}px)`);
+    const on = () => setM(q.matches);
+    on();
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return m;
+}
 
 // Blender (Z up) → website (Y up), scaled the same way as the model
 function blenderToWeb([x, y, z]: number[]) {
@@ -89,103 +256,9 @@ function blenderToWeb([x, y, z]: number[]) {
     .multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
 }
 
-const LED_NAME = "LED_EN_OG_4mm";
-const LED_VIEW = 2; // which STOPS line it shows on (0 = first). 3 = bird's-eye
-const LED_SPEED = 1.5; // how fast it travels around
-const LED_LENGTH = 40; // higher = shorter light streak
-const LED_BRIGHTNESS = 6;
-const GLOW_VIEW = 2; // which STOPS line it shows on (3 = bird's-eye)
-const GLOW_BRIGHTNESS = 4; // brightness of the outline
-const GLOW_SPEED = 0.8; // speed of the travelling highlight
-const HALO_STRENGTH = 1; // brightness of the light pool under the machine
-const HALO_SIZE = 2.2; // size, relative to the machine
-
-// Text fades out as it scrolls up toward the header (pixels from top of screen)
-const FADE_START = 280; // starts fading here
-const FADE_END = 110; // fully gone here (just below the header)
-
-// How strongly the machine reflects light. Higher = more visible on black.
-const ENV_INTENSITY = 1;
-
-// Camera always looks at the machine's center.
-// pos: where the camera stands (pick in DEBUG mode)
-// offsetX: shifts the machine on screen. Negative = machine on the right, positive = on the left.
-const STOPS = [
-  {
-    name: "Logo",
-    pos: new THREE.Vector3(-0.1, 1.74, 9.78),
-    target: new THREE.Vector3(0, 0, 0),
-    offsetX: 0,
-    offsetY: 0.48,
-  },
-  {
-    name: "Overview",
-    pos: new THREE.Vector3(5.41, 5.03, 9.29),
-    target: new THREE.Vector3(-3.99, 1.43, -1.17),
-    offsetX: -0.18,
-    offsetY: 0,
-  },
-
-  {
-    name: "Bird's-eye",
-    pos: new THREE.Vector3(0, 14, 0.5),
-    target: new THREE.Vector3(0, 0, 0),
-    offsetX: 0.18,
-    offsetY: 0,
-  },
-  {
-    name: "Side",
-    pos: new THREE.Vector3(14, 3, 3),
-    target: new THREE.Vector3(0, 0, 1.2),
-    offsetX: -0.15,
-    offsetY: 0,
-  },
-];
-
-const FONT = "var(--font-display), system-ui, sans-serif";
-
-const SECTIONS = [
-  { label: "", text: "" }, // hero
-  {
-    label: "Power",
-    text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
-    side: "left",
-  },
-
-  {
-    label: "Footprint",
-    text: "Compact from above. Fits on a shelf, a counter or a laundry room corner.",
-    side: "right",
-  },
-  {
-    label: "Loading",
-    text: "The plate slides out. Lay your shirt down and let the machine take over.",
-    side: "left",
-  },
-];
-const SMOOTHING = 5;
-
-const scrollState = { progress: 0 };
-
-const range = (p: number, [a, b]: [number, number]) =>
-  Math.min(Math.max((p - a) / (b - a), 0), 1);
-const smooth = (k: number) => k * k * (3 - 2 * k);
-
-function getScrollProgress() {
-  const el = document.getElementById("scroll-sections");
-  const total = el ? el.offsetHeight : document.documentElement.scrollHeight;
-  const max = total - window.innerHeight;
-  return max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0;
-}
-
-function ScrollTracker() {
-  useFrame((_, delta) => {
-    const target = getScrollProgress();
-    scrollState.progress +=
-      (target - scrollState.progress) * (1 - Math.exp(-SMOOTHING * delta));
-  });
-  return null;
-}
+// =====================================================================
+// MACHINE
+// =====================================================================
 
 function Machine() {
   const { scene, animations } = useGLTF(MODEL_PATH);
@@ -198,23 +271,7 @@ function Machine() {
     return { scale: s, height: size.y * s };
   }, [scene]);
 
-  // Soft round glow texture for the floor
-  const halo = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 256;
-    const g = c.getContext("2d")!;
-    const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-    grd.addColorStop(0, "rgba(255,255,255,0.35)");
-    grd.addColorStop(0.5, "rgba(255,255,255,0.08)");
-    grd.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = grd;
-    g.fillRect(0, 0, 256, 256);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, []);
-
-  // Make every surface reflect the studio lights more strongly
+  // Reflection strength of every surface
   useEffect(() => {
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -223,6 +280,16 @@ function Machine() {
         ? mesh.material
         : [mesh.material];
       for (const m of mats) {
+        // Glossy clear coat on the black body, like the Blender render
+        if (m.name.startsWith("BASE") && "clearcoat" in m) {
+          const pm = m as THREE.MeshPhysicalMaterial;
+          pm.clearcoat = COAT;
+          pm.clearcoatRoughness = 0.06;
+        }
+        // Brighter logo, LED and text
+        if (m.name === "Material.007" && "emissiveIntensity" in m) {
+          (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
+        }
         if ("envMapIntensity" in m) {
           (m as THREE.MeshStandardMaterial).envMapIntensity = ENV_INTENSITY;
           m.needsUpdate = true;
@@ -231,8 +298,7 @@ function Machine() {
     });
   }, [scene]);
 
-  // Blender's animations, ready to be scrubbed by the scroll
-  const animTime = useRef(0);
+  // Blender's animations (door, plates, grapples), positioned by the scroll
   const { mixer, actions } = useMemo(() => {
     const m = new THREE.AnimationMixer(scene);
     const list = animations.map((clip) => {
@@ -245,6 +311,7 @@ function Machine() {
     return { mixer: m, actions: list };
   }, [scene, animations]);
 
+  // Running light on the LED strip
   const led = useMemo(() => {
     const root = scene.getObjectByName(LED_NAME);
     if (!root) {
@@ -295,23 +362,15 @@ function Machine() {
   useFrame((_, delta) => {
     if (led) {
       led.uAngle.value += delta * LED_SPEED;
-      const viewAt = LED_VIEW / (STOPS.length - 1);
-      const dist = Math.abs(scrollState.progress - viewAt);
-      led.uStrength.value = Math.max(0, 1 - dist / 0.1);
+      led.uStrength.value = nearStop(LED_STOP);
     }
-    // Start only once the camera has (almost) reached that stop
-    const trigger = ANIM_STOP / (STOPS.length - 1) - 0.01;
-    const goal = scrollState.progress >= trigger ? ANIM_END : 0;
-    const step = delta * ANIM_SPEED;
-    animTime.current =
-      goal > animTime.current
-        ? Math.min(goal, animTime.current + step)
-        : Math.max(goal, animTime.current - step * 2);
 
+    // Place every part at the moment of the animation matching the scroll
+    const t = currentOpenAmount() * ANIM_END;
     for (const a of actions) {
       a.enabled = true;
       a.paused = false;
-      a.time = Math.min(animTime.current, a.getClip().duration);
+      a.time = Math.min(t, a.getClip().duration);
     }
     mixer.update(0);
   });
@@ -321,28 +380,22 @@ function Machine() {
       <Center>
         <primitive object={scene} scale={scale} />
       </Center>
-      {/* Light pool under the machine */}
-      <mesh
-        rotation-x={-Math.PI / 2}
-        position={[0, -height / 2 - 0.002, 0]}
-        renderOrder={-1}
-      >
-        <planeGeometry
-          args={[MODEL_SIZE * HALO_SIZE, MODEL_SIZE * HALO_SIZE * 0.6]}
-        />
-        <meshBasicMaterial
-          map={halo}
-          transparent
-          depthWrite={false}
-          toneMapped={false}
-          opacity={HALO_STRENGTH}
-        />
-      </mesh>
+      {/* Soft shadow on the surface */}
+      <ContactShadows
+        position={[0.5, -height / 2, 0.3]}
+        scale={MODEL_SIZE * 2.5}
+        blur={2.5}
+        opacity={SHADOW_OPACITY}
+        far={MODEL_SIZE}
+      />
     </>
   );
 }
 
-// Moves the camera around the machine's center, like orbiting it
+// =====================================================================
+// CAMERA
+// =====================================================================
+
 function CameraRig() {
   const stops = useMemo(
     () =>
@@ -358,9 +411,9 @@ function CameraRig() {
   const target = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(({ camera, size }) => {
-    const t = scrollState.progress * (stops.length - 1);
+    const t = scrollState.cam;
     const i = Math.min(Math.floor(t), stops.length - 2);
-    const e = smooth(t - i);
+    const e = smooth(clamp01(t - i));
     const a = stops[i];
     const b = stops[i + 1];
 
@@ -376,14 +429,14 @@ function CameraRig() {
     );
     target.lerpVectors(a.target, b.target, e);
 
-    // Pull the camera back on narrow screens so the machine fits
+    // Pull back on narrow screens so the machine fits
     const aspect = size.width / size.height;
     sph.radius *= Math.min(Math.max(REF_ASPECT / aspect, 1), MAX_ZOOM_OUT);
 
     camera.position.setFromSpherical(sph).add(target);
     camera.lookAt(target);
 
-    // Desktop: machine shifts left/right beside the text. Mobile: centered and lifted up.
+    // Desktop: machine shifted beside the text. Mobile: centered and lifted.
     const mobile = size.width < MOBILE_BP;
     const offsetX = mobile ? 0 : THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
     const offsetY =
@@ -401,6 +454,7 @@ function CameraRig() {
 
   return null;
 }
+
 function CameraReadout() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const controls = useThree((s) => s.controls) as any;
@@ -423,21 +477,21 @@ function CameraReadout() {
   return null;
 }
 
+// =====================================================================
+// LIGHTING
+// =====================================================================
+
 function EdgeGlow() {
   const ring = useRef<THREE.Mesh>(null);
   const sweep = useRef<THREE.Group>(null);
 
   useFrame((_, delta) => {
-    const viewAt = GLOW_VIEW / (STOPS.length - 1);
-    const k = Math.max(0, 1 - Math.abs(scrollState.progress - viewAt) / 0.1);
-
-    // Ring above the machine: shows up as an outline on the rounded edges
+    const k = nearStop(GLOW_STOP);
     if (ring.current) {
       (ring.current.material as THREE.MeshBasicMaterial).color.setScalar(
         GLOW_BRIGHTNESS * k,
       );
     }
-    // Strip circling the machine: a highlight that travels along the edges
     if (sweep.current) {
       sweep.current.rotation.y += delta * GLOW_SPEED;
       sweep.current.scale.setScalar(Math.max(k, 0.001));
@@ -490,8 +544,14 @@ function StudioLights() {
   );
 }
 
+// =====================================================================
+// PAGE
+// =====================================================================
+
 export default function Home() {
   const isMobile = useIsMobile();
+
+  // Text fades out before reaching the header
   useEffect(() => {
     if (DEBUG) return;
     const blocks = Array.from(
@@ -507,7 +567,7 @@ export default function Home() {
           1,
         );
         el.style.opacity = String(o);
-        el.style.transform = `translateY(${(1 - o) * -10}px)`; // slight drift up as it fades
+        el.style.transform = `translateY(${(1 - o) * -10}px)`;
       }
     };
 
@@ -525,16 +585,59 @@ export default function Home() {
       window.removeEventListener("resize", onScroll);
     };
   }, []);
+
+  // Layout of a text section (left or right of the machine)
+  const textLayout = (side: string): React.CSSProperties => ({
+    display: "flex",
+    alignItems: isMobile ? "flex-end" : "center",
+    justifyContent: isMobile
+      ? "flex-start"
+      : side === "right"
+        ? "flex-end"
+        : "flex-start",
+    padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
+    boxSizing: "border-box",
+  });
+
+  const textBlock = (s: (typeof SECTIONS)[number]) => (
+    <div
+      data-fade
+      style={{ maxWidth: 520, fontFamily: FONT, pointerEvents: "auto" }}
+    >
+      <p
+        style={{
+          margin: "0 0 20px",
+          fontSize: 12,
+          letterSpacing: "0.4em",
+          textTransform: "uppercase",
+          color: "var(--text-faint)",
+        }}
+      >
+        • {s.label}
+      </p>
+      <ScrollRevealText
+        text={s.text}
+        style={{
+          margin: 0,
+          fontSize: "clamp(28px, 3.2vw, 46px)",
+          fontWeight: 300,
+          lineHeight: 1.15,
+          letterSpacing: "-0.01em",
+          color: "var(--text)",
+        }}
+      />
+    </div>
+  );
+
   return (
-    <main style={{ position: "relative", background: "#000" }}>
-      {/* Background glow */}
+    <main style={{ position: "relative", background: "var(--bg)" }}>
+      {/* Background */}
       <div
         style={{
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          background:
-            "radial-gradient(ellipse 55% 45% at 50% 55%, #242424 0%, #0a0a0a 55%, #000 100%)",
+          background: BACKGROUND,
         }}
       />
 
@@ -552,26 +655,24 @@ export default function Home() {
       >
         <Canvas
           camera={{ position: [5, 1, 0], fov: FOV }}
-          dpr={isMobile ? [1, 1.5] : [1, 2]}
+          dpr={[1, 2]}
           gl={{ toneMapping: THREE.AgXToneMapping, toneMappingExposure: 1 }}
         >
           <Suspense fallback={null}>
-            <Environment resolution={256} frames={isMobile ? 1 : Infinity}>
-              {/* Blender World */}
+            <Environment
+              resolution={isMobile ? 256 : 512}
+              frames={isMobile ? 1 : Infinity}
+            >
               <color attach="background" args={[WORLD_COLOR]} />
-              {/* Blender's 4 studio lights */}
               <StudioLights />
-              {/* Not in Blender: faint edge strips so the black body separates from the black page */}
+              {/* Long strip above and behind the machine: creates the diagonal band on the top and plate */}
+              {/* Diagonal light strip: placed exactly where the top surface reflects it from stop 2 */}
               <Lightformer
-                intensity={3}
-                position={[-10, 2, 0]}
-                scale={[8, 0.6, 1]}
-                target={[0, 0, 0]}
-              />
-              <Lightformer
-                intensity={3}
-                position={[10, 2, 0]}
-                scale={[8, 0.6, 1]}
+                form="rect"
+                intensity={8}
+                position={[0, 12.7, -5.9]}
+                scale={[2.5, 30, 1]}
+                up={[Math.sin(BAND_ANGLE), Math.cos(BAND_ANGLE), 0]}
                 target={[0, 0, 0]}
               />
               <EdgeGlow />
@@ -612,96 +713,88 @@ export default function Home() {
           id="scroll-sections"
           style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}
         >
-          {SECTIONS.map((s, i) =>
-            i === 0 ? (
-              <section
-                key="hero"
-                style={{
-                  position: "relative",
-                  height: "100vh",
-                  display: "flex",
-                  alignItems: "flex-end",
-                  justifyContent: isMobile ? "center" : "space-between",
-                  padding: "0 6vw 20vh",
-                  boxSizing: "border-box",
-                }}
-              >
-                <p
-                  data-fade
+          {SECTIONS.map((s, i) => {
+            // Stop 1: hero
+            if (i === 0) {
+              return (
+                <section
+                  key="hero"
+                  data-stop
                   style={{
-                    margin: 0,
-                    fontFamily: FONT,
-                    fontSize: 13,
-                    letterSpacing: "0.4em",
-                    textTransform: "uppercase",
-                    color: "rgba(255,255,255,0.7)",
-                  }}
-                >
-                  Prototype out now
-                </p>
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    bottom: isMobile ? "26vh" : "28vh",
+                    position: "relative",
+                    height: "100vh",
                     display: "flex",
-                    justifyContent: "center",
-                  }}
-                >
-                  <WaitlistButton data-fade />
-                </div>
-              </section>
-            ) : (
-              <section
-                key={s.label}
-                style={{
-                  height: "100vh",
-                  display: "flex",
-                  alignItems: isMobile ? "flex-end" : "center",
-                  justifyContent: isMobile
-                    ? "flex-start"
-                    : s.side === "right"
-                      ? "flex-end"
-                      : "flex-start",
-                  padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
-                  boxSizing: "border-box",
-                }}
-              >
-                <div
-                  data-fade
-                  style={{
-                    maxWidth: 520,
-                    fontFamily: FONT,
-                    pointerEvents: "auto",
+                    alignItems: "flex-end",
+                    justifyContent: isMobile ? "center" : "space-between",
+                    padding: "0 6vw 20vh",
+                    boxSizing: "border-box",
                   }}
                 >
                   <p
-                    style={{
-                      margin: "0 0 20px",
-                      fontSize: 12,
-                      letterSpacing: "0.4em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.5)",
-                    }}
-                  >
-                    • {s.label}
-                  </p>
-                  <ScrollRevealText
-                    text={s.text}
+                    data-fade
                     style={{
                       margin: 0,
-                      fontSize: "clamp(28px, 3.2vw, 46px)",
-                      fontWeight: 300,
-                      lineHeight: 1.15,
-                      letterSpacing: "-0.01em",
-                      color: "#fff",
+                      fontFamily: FONT,
+                      fontSize: 13,
+                      letterSpacing: "0.4em",
+                      textTransform: "uppercase",
+                      color: "var(--text-dim)",
                     }}
-                  />
-                </div>
+                  >
+                    Prototype out now
+                  </p>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      bottom: isMobile ? "26vh" : "28vh",
+                      display: "flex",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <WaitlistButton data-fade />
+                  </div>
+                </section>
+              );
+            }
+
+            // Last stop: pinned. The screen holds still while scrolling moves the parts.
+            if (i === SECTIONS.length - 1) {
+              return (
+                <section
+                  key={s.label}
+                  data-stop
+                  style={{
+                    position: "relative",
+                    height: `${100 + PIN_LENGTH}vh`,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      height: "100vh",
+                      ...textLayout(s.side),
+                    }}
+                  >
+                    {textBlock(s)}
+                  </div>
+                </section>
+              );
+            }
+
+            // Normal stops
+            return (
+              <section
+                key={s.label}
+                data-stop
+                style={{ height: "100vh", ...textLayout(s.side) }}
+              >
+                {textBlock(s)}
               </section>
-            ),
-          )}
+            );
+          })}
         </div>
       )}
 

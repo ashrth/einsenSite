@@ -8,6 +8,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px 6vw;
+  mix-blend-mode: difference;
   padding-top: max(20px, env(safe-area-inset-top));
   pointer-events: none; /* lets the page underneath stay scrollable */
 }
@@ -21,6 +22,7 @@
   display: block;
   height: 28px;
   width: auto;
+  filter: invert(1);
 }
 
 .nav {
@@ -91,5 +93,4 @@
   display: block;
   height: 40px;
   width: auto;
-  filter: invert(1); /* black logo shows as white */
 }

@@ -128,3 +128,18 @@
     @apply font-sans;
   }
 }
+
+
+/* ---- Site theme ---- */
+:root {
+  --bg: #d8d8d6;                       /* page background */
+  --text: #111;                        /* main text */
+  --text-dim: rgba(17, 17, 17, 0.6);   /* secondary text */
+  --text-faint: rgba(17, 17, 17, 0.45);/* small labels */
+  --glow-rgb: 40, 40, 40;              /* reading-shine color (r, g, b) */
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}

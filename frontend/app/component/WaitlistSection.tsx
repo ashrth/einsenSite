@@ -10,7 +10,7 @@ export default function WaitlistSection() {
       style={{
         position: "relative",
         zIndex: 3,
-        background: "#000",
+        background: "var(--bg)",
         minHeight: "70vh", // section height
         display: "flex",
         flexDirection: "column",
@@ -21,7 +21,7 @@ export default function WaitlistSection() {
         boxSizing: "border-box",
         textAlign: "center",
         fontFamily: FONT,
-        color: "#fff",
+        color: "var(--text)",
       }}
     >
       <h2
@@ -39,7 +39,7 @@ export default function WaitlistSection() {
           margin: 0,
           fontSize: 18,
           fontWeight: 300,
-          color: "rgba(255,255,255,0.6)",
+          color: "var(--text-dim)",
           maxWidth: 460,
         }}
       >
