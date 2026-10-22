@@ -25,7 +25,7 @@ import WaitlistButton from "./component/WaitlistButton";
 const DEBUG = false;
 const DEBUG_OPEN = 1; // in DEBUG mode: 0 = parts closed, 1 = parts open
 
-const MODEL_PATH = "/models/model2.glb";
+const MODEL_PATH = "/models/model3.glb";
 const MODEL_SIZE = 8;
 const FOV = 30; // zoom: smaller = more zoomed in
 
@@ -36,7 +36,7 @@ const BACKGROUND = [
   // angle: 75deg tilts the split so the grey side is larger at the top, like the reference
   "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
 ].join(", ");
-const BAND_ANGLE = 0.6; // tilt of the light band across the top (0 = straight)
+
 const COAT = 1; // glossiness of the black body (0 = matte, 1 = piano black)
 const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
@@ -77,14 +77,14 @@ const STOPS = [
 
 // How open the machine is at each stop (0 = closed, 1 = fully open).
 // The LAST stop is pinned: there, scrolling opens it from closed to fully open.
-const OPEN_AT_STOP = [0, 1, 0, 0];
+const OPEN_AT_STOP = [0, 1, 0,];
 
 // How much scrolling the pinned last stop takes (in screen heights x 100).
 // Bigger = the parts move slower relative to the scroll.
-const PIN_LENGTH = 300;
+const PIN_LENGTH = 120;
 
 // Length of the Blender animation used (seconds): everything has finished moving by 10s
-const ANIM_END = 10;
+const ANIM_END = 7.2;
 
 const FONT = "var(--font-display), system-ui, sans-serif";
 
@@ -96,11 +96,7 @@ const SECTIONS = [
     text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
     side: "left",
   },
-  {
-    label: "Footprint",
-    text: "Compact from above. Fits on a shelf, a counter or a laundry room corner.",
-    side: "left",
-  },
+  
   {
     label: "Loading",
     text: "The door opens, the plates slide out. Lay your shirt down and let the machine take over.",
@@ -117,47 +113,27 @@ const MOBILE_OFFSET_Y = 0.12;
 // ---- Blender studio lights (from File 2) ----
 const BLENDER_LIGHTS = [
   {
-    name: "Area.004 (main)",
-    pos: [-13.225, 3.233, 3.502],
-    dir: [1.239, 0.715, 0.753],
-    size: 3.65,
-    intensity: 7,
-  },
-  {
-    name: "Area.005",
-    pos: [-0.23, 0.321, 0.903],
-    dir: [0.841, 0.503, -0.201],
-    size: 0.652,
-    intensity: 3.9,
-  },
-  {
-    name: "Area.003",
-    pos: [0.138, -0.935, 0.903],
-    dir: [0.841, 0.503, -0.201],
-    size: 1.139,
-    intensity: 0.9,
-  },
-  {
-    name: "Area.002",
-    pos: [0.63, -0.13, 0.151],
-    dir: [-0.667, 0.686, -0.291],
-    size: 0.463,
-    intensity: 0.9,
+    name: "Area (main)",
+    pos: [-0.218, 0.14, 0.649],
+    dir: [1.796, -0.9, 0.379],
+    size: 0.99,
+    intensity: 3.5,
+    color: "#f7f0ff",
   },
 ];
 const LIGHT_BOOST = 1;
 const WORLD_COLOR = "#404040";
-const MODEL_CENTER = new THREE.Vector3(-0.002, 0.0655, 0.061);
-const MODEL_WIDTH = 0.75;
+const MODEL_CENTER = new THREE.Vector3(-0.0127, 0.0651, 0.061);
+const MODEL_WIDTH = 0.7504;
 const ENV_INTENSITY = 1;
 
 // ---- Light effects on the bird's-eye stop ----
 const LED_NAME = "LED_EN_OG_4mm";
-const LED_STOP = 2; // which stop (0 = first)
+const LED_STOP = -10; // which stop (0 = first)
 const LED_SPEED = 1.5;
 const LED_LENGTH = 40;
 const LED_BRIGHTNESS = 6;
-const GLOW_STOP = 2;
+const GLOW_STOP = -10;
 const GLOW_BRIGHTNESS = 4;
 const GLOW_SPEED = 0.8;
 
@@ -533,6 +509,7 @@ function StudioLights() {
           <Lightformer
             key={l.name}
             form="rect"
+            color={l.color}
             intensity={l.intensity * LIGHT_BOOST}
             position={p.toArray()}
             scale={[l.size * k, l.size * k, 1]}
@@ -672,7 +649,7 @@ export default function Home() {
                 intensity={8}
                 position={[0, 12.7, -5.9]}
                 scale={[2.5, 30, 1]}
-                up={[Math.sin(BAND_ANGLE), Math.cos(BAND_ANGLE), 0]}
+               
                 target={[0, 0, 0]}
               />
               <EdgeGlow />
