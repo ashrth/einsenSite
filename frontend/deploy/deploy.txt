@@ -7,4 +7,4 @@
 2026-10-20 og animation and lights imported
 2026-10-21 placement change, stop deleted, swiftier animation
 2026-10-22 theme change, stop deleted, 
-2026-10-22 theme change, stop deleted, scroll time reduced, model changed
+2026-10-22 theme change, stop deleted, scroll time reduced, model changed, removed glossiness

@@ -37,7 +37,7 @@ const BACKGROUND = [
   "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
 ].join(", ");
 
-const COAT = 1; // glossiness of the black body (0 = matte, 1 = piano black)
+
 const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
 // ---- Camera stops, in scroll order ----
@@ -77,7 +77,7 @@ const STOPS = [
 
 // How open the machine is at each stop (0 = closed, 1 = fully open).
 // The LAST stop is pinned: there, scrolling opens it from closed to fully open.
-const OPEN_AT_STOP = [0, 1, 0,];
+const OPEN_AT_STOP = [0, 1, 0];
 
 // How much scrolling the pinned last stop takes (in screen heights x 100).
 // Bigger = the parts move slower relative to the scroll.
@@ -96,7 +96,7 @@ const SECTIONS = [
     text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
     side: "left",
   },
-  
+
   {
     label: "Loading",
     text: "The door opens, the plates slide out. Lay your shirt down and let the machine take over.",
@@ -256,12 +256,6 @@ function Machine() {
         ? mesh.material
         : [mesh.material];
       for (const m of mats) {
-        // Glossy clear coat on the black body, like the Blender render
-        if (m.name.startsWith("BASE") && "clearcoat" in m) {
-          const pm = m as THREE.MeshPhysicalMaterial;
-          pm.clearcoat = COAT;
-          pm.clearcoatRoughness = 0.06;
-        }
         // Brighter logo, LED and text
         if (m.name === "Material.007" && "emissiveIntensity" in m) {
           (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
@@ -649,7 +643,6 @@ export default function Home() {
                 intensity={8}
                 position={[0, 12.7, -5.9]}
                 scale={[2.5, 30, 1]}
-               
                 target={[0, 0, 0]}
               />
               <EdgeGlow />
