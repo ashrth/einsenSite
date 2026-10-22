@@ -25,7 +25,7 @@ import WaitlistButton from "./component/WaitlistButton";
 const DEBUG = false;
 const DEBUG_OPEN = 1; // in DEBUG mode: 0 = parts closed, 1 = parts open
 
-const MODEL_PATH = "/models/model3.glb";
+const MODEL_PATH = "/models/model4.glb";
 const MODEL_SIZE = 8;
 const FOV = 30; // zoom: smaller = more zoomed in
 
@@ -36,7 +36,6 @@ const BACKGROUND = [
   // angle: 75deg tilts the split so the grey side is larger at the top, like the reference
   "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
 ].join(", ");
-
 
 const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
@@ -127,16 +126,6 @@ const MODEL_CENTER = new THREE.Vector3(-0.0127, 0.0651, 0.061);
 const MODEL_WIDTH = 0.7504;
 const ENV_INTENSITY = 1;
 
-// ---- Light effects on the bird's-eye stop ----
-const LED_NAME = "LED_EN_OG_4mm";
-const LED_STOP = -10; // which stop (0 = first)
-const LED_SPEED = 1.5;
-const LED_LENGTH = 40;
-const LED_BRIGHTNESS = 6;
-const GLOW_STOP = -10;
-const GLOW_BRIGHTNESS = 4;
-const GLOW_SPEED = 0.8;
-
 // ---- Soft shadow under the machine ----
 const SHADOW_OPACITY = 0.5;
 
@@ -205,10 +194,6 @@ function currentOpenAmount() {
   );
 }
 
-// How strongly an effect tied to a stop should show (1 at that stop, fading out nearby)
-const nearStop = (stop: number) =>
-  Math.max(0, 1 - Math.abs(scrollState.cam - stop) / 0.4);
-
 // =====================================================================
 // HELPERS
 // =====================================================================
@@ -256,6 +241,12 @@ function Machine() {
         ? mesh.material
         : [mesh.material];
       for (const m of mats) {
+        // Logo, power icon, LED and text sit flat on the body: draw them slightly in front, so they don't flicker
+        if (m.name === "Material.007") {
+          m.polygonOffset = true;
+          m.polygonOffsetFactor = -1;
+          m.polygonOffsetUnits = -4;
+        }
         // Brighter logo, LED and text
         if (m.name === "Material.007" && "emissiveIntensity" in m) {
           (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
@@ -281,60 +272,7 @@ function Machine() {
     return { mixer: m, actions: list };
   }, [scene, animations]);
 
-  // Running light on the LED strip
-  const led = useMemo(() => {
-    const root = scene.getObjectByName(LED_NAME);
-    if (!root) {
-      console.warn(`LED not found: "${LED_NAME}"`);
-      return null;
-    }
-    const uniforms = {
-      uAngle: { value: 0 },
-      uStrength: { value: 0 },
-      uCenter: { value: new THREE.Vector3() },
-    };
-    root.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.geometry.computeBoundingBox();
-      mesh.geometry.boundingBox!.getCenter(uniforms.uCenter.value);
-      const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
-      mat.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, uniforms);
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            "#include <common>",
-            "#include <common>\nvarying vec3 vLedPos;",
-          )
-          .replace(
-            "#include <begin_vertex>",
-            "#include <begin_vertex>\nvLedPos = position;",
-          );
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            "#include <common>",
-            "#include <common>\nvarying vec3 vLedPos;\nuniform float uAngle;\nuniform float uStrength;\nuniform vec3 uCenter;",
-          )
-          .replace(
-            "#include <emissivemap_fragment>",
-            `#include <emissivemap_fragment>
-          vec3 lp = vLedPos - uCenter;
-          float a = atan(lp.z, lp.x);
-          float d = abs(mod(a - uAngle + 3.14159265, 6.2831853) - 3.14159265);
-          totalEmissiveRadiance += vec3(1.0) * exp(-d * d * ${LED_LENGTH.toFixed(1)}) * uStrength * ${LED_BRIGHTNESS.toFixed(1)};`,
-          );
-      };
-      mesh.material = mat;
-    });
-    return uniforms;
-  }, [scene]);
-
   useFrame((_, delta) => {
-    if (led) {
-      led.uAngle.value += delta * LED_SPEED;
-      led.uStrength.value = nearStop(LED_STOP);
-    }
-
     // Place every part at the moment of the animation matching the scroll
     const t = currentOpenAmount() * ANIM_END;
     for (const a of actions) {
@@ -450,45 +388,6 @@ function CameraReadout() {
 // =====================================================================
 // LIGHTING
 // =====================================================================
-
-function EdgeGlow() {
-  const ring = useRef<THREE.Mesh>(null);
-  const sweep = useRef<THREE.Group>(null);
-
-  useFrame((_, delta) => {
-    const k = nearStop(GLOW_STOP);
-    if (ring.current) {
-      (ring.current.material as THREE.MeshBasicMaterial).color.setScalar(
-        GLOW_BRIGHTNESS * k,
-      );
-    }
-    if (sweep.current) {
-      sweep.current.rotation.y += delta * GLOW_SPEED;
-      sweep.current.scale.setScalar(Math.max(k, 0.001));
-    }
-  });
-
-  return (
-    <>
-      <Lightformer
-        ref={ring}
-        form="ring"
-        position={[0, 5, 0]}
-        scale={10}
-        intensity={0}
-        target={[0, 0, 0]}
-      />
-      <group ref={sweep}>
-        <Lightformer
-          position={[6, 6, 0]}
-          scale={[2, 8, 1]}
-          intensity={20}
-          target={[0, 0, 0]}
-        />
-      </group>
-    </>
-  );
-}
 
 function StudioLights() {
   const k = MODEL_SIZE / MODEL_WIDTH;
@@ -645,7 +544,6 @@ export default function Home() {
                 scale={[2.5, 30, 1]}
                 target={[0, 0, 0]}
               />
-              <EdgeGlow />
             </Environment>
 
             <ScrollTracker />

@@ -4,7 +4,7 @@
   height: 28vh;
   min-height: 220px;
   overflow: hidden;
-  background: transparent;
+  background: var(--bg);
 }
 
 /* Chrome fades in from the top, so there's no edge */
