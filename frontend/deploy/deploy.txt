@@ -8,3 +8,4 @@
 2026-10-21 placement change, stop deleted, swiftier animation
 2026-10-22 theme change, stop deleted, 
 2026-10-22 theme change, stop deleted, scroll time reduced, model changed, removed glossiness
+2026-10-23 stops changed, scroll effect removed, added fade in effect
