@@ -33,14 +33,8 @@ const FOV = 30; // zoom: smaller = more zoomed in
 const BACKGROUND = [
   // fine grain, like a real surface
   `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-  // angle: 75deg tilts the split so the grey side is larger at the top, like the reference
   "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
 ].join(", ");
-
-const TRANSITIONS = ["move", "fade"];
-function gapEase(i: number, f: number) {
-  return TRANSITIONS[i] === "fade" ? (f < 0.5 ? 0 : 1) : smooth(f);
-}
 
 const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
@@ -63,15 +57,8 @@ const STOPS = [
     offsetX: 0,
     offsetY: 0.04,
   },
-  // {
-  //   name: "Bird's-eye",
-  //   pos: new THREE.Vector3(0, 14, 0.5),
-  //   target: new THREE.Vector3(0, 0, 0),
-  //   offsetX: -0.18,
-  //   offsetY: 0,
-  // },
   {
-    name: "Side (pinned: scroll moves the parts)",
+    name: "Side (the machine opens here)",
     pos: new THREE.Vector3(14, 3, 3),
     target: new THREE.Vector3(0, 0, 1.2),
     offsetX: -0.15,
@@ -79,35 +66,42 @@ const STOPS = [
   },
 ];
 
-// How open the machine is at each stop (0 = closed, 1 = fully open).
-// The LAST stop is pinned: there, scrolling opens it from closed to fully open.
+// How the camera travels between stops (one entry per gap):
+// "move" = glides to the next view, "fade" = dissolves into the next view (no swinging)
+const TRANSITIONS = ["move", "fade"];
+
+// How open the machine is at each stop (0 = closed, 1 = open).
+// The last stop opens by itself once the camera arrives.
 const OPEN_AT_STOP = [0, 1, 0];
 
-// How much scrolling the pinned last stop takes (in screen heights x 100).
-// Bigger = the parts move slower relative to the scroll.
-const OPEN_PART = 0.75; // share of the pinned scroll used for opening; the rest shows the button
-const PIN_LENGTH = 160; // slightly longer, to make room for the button moment
+// Scroll held at the side view while it opens (in screen heights x 100)
+const PIN_LENGTH = 80;
+const ANIM_SPEED = 2; // 1 = Blender speed, 2 = twice as fast
+const ANIM_END = 7.2; // seconds: everything in the Blender animation has finished by then
 
-// Length of the Blender animation used (seconds): everything has finished moving by 10s
-const ANIM_END = 7.2;
+// ---- "Join the waitlist" button at the side view ----
+const CTA_AT = 0.75; // appears when the machine is this open (0.75 = three quarters)
+const CTA_POS = { left: "62%", top: "80%" }; // position on screen (desktop), centered on this point
+const CTA_POS_MOBILE = { left: "50%", top: "72%" }; // position on screen (mobile)
+const HIDE_TEXT_WITH_CTA = true; // the section text fades out when the button appears
 
 const FONT = "var(--font-display), system-ui, sans-serif";
 
 // One per stop. side: "left" or "right" (where the text sits).
+// height: screen height of the section (%). Smaller = quicker transition to the next stop.
 const SECTIONS = [
   { label: "", text: "", side: "left", height: 100 }, // hero
   {
     label: "Ready",
     text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
     side: "left",
-    height: 60,
+    height: 40,
   },
-
   {
     label: "Loading",
     text: "The door opens, the plates slide out. Lay your shirt down and let the machine take over.",
     side: "left",
-    height: 100,
+    height: 100, // not used: the last section's length is PIN_LENGTH
   },
 ];
 
@@ -117,7 +111,7 @@ const REF_ASPECT = 1.4;
 const MAX_ZOOM_OUT = 2.2;
 const MOBILE_OFFSET_Y = 0.12;
 
-// ---- Blender studio lights (from File 2) ----
+// ---- Light (from the Blender file) ----
 const BLENDER_LIGHTS = [
   {
     name: "Area (main)",
@@ -141,7 +135,7 @@ const SHADOW_OPACITY = 0.5;
 const FADE_START = 280;
 const FADE_END = 110;
 
-// How quickly the camera and parts follow the scroll
+// How quickly the camera follows the scroll
 const SMOOTHING = 5;
 
 // =====================================================================
@@ -151,31 +145,33 @@ const SMOOTHING = 5;
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
 const smooth = (k: number) => k * k * (3 - 2 * k);
 
+// Easing for a gap: gliding uses a smooth curve; fading switches view halfway (while invisible)
+function gapEase(i: number, f: number) {
+  return TRANSITIONS[i] === "fade" ? (f < 0.5 ? 0 : 1) : smooth(f);
+}
+
 // cam: which stop the camera is at (1.5 = halfway between stop 1 and 2)
-// pin: progress through the pinned last stop (0 = start, 1 = parts fully out)
-const scrollState = { cam: 0, pin: 0 };
+// inPin: true while the side view is held on screen
+const scrollState = { cam: 0, inPin: false };
+
+// How open the machine is right now (0 = closed, 1 = open)
+const machineState = { open: 0 };
 
 function readScroll() {
   const els = Array.from(document.querySelectorAll<HTMLElement>("[data-stop]"));
-  if (!els.length) return { cam: 0, pin: 0 };
+  if (!els.length) return { cam: 0, inPin: false };
   const y = window.scrollY;
   const vh = window.innerHeight;
   const tops = els.map((e) => e.getBoundingClientRect().top + y);
   const last = els.length - 1;
+  const pinLen = els[last].offsetHeight - vh;
+  const inPin = y >= tops[last] - vh * 0.02 && y <= tops[last] + pinLen;
 
-  // Inside the pinned last section
-  if (y >= tops[last]) {
-    const pinLen = els[last].offsetHeight - vh;
-    return {
-      cam: last,
-      pin: pinLen > 0 ? clamp01((y - tops[last]) / pinLen) : 1,
-    };
-  }
+  if (y >= tops[last]) return { cam: last, inPin };
 
-  // Between two stops
   let i = 0;
   while (i < last - 1 && y >= tops[i + 1]) i++;
-  return { cam: i + clamp01((y - tops[i]) / (tops[i + 1] - tops[i])), pin: 0 };
+  return { cam: i + clamp01((y - tops[i]) / (tops[i + 1] - tops[i])), inPin };
 }
 
 function ScrollTracker() {
@@ -183,23 +179,19 @@ function ScrollTracker() {
     const target = readScroll();
     const k = 1 - Math.exp(-SMOOTHING * delta);
     scrollState.cam += (target.cam - scrollState.cam) * k;
-    scrollState.pin += (target.pin - scrollState.pin) * k;
+    scrollState.inPin = target.inPin;
   });
   return null;
 }
 
-// How open the machine should be right now (0 = closed, 1 = open)
-function currentOpenAmount() {
+// How open the machine should be, based on where the scroll is
+function targetOpenAmount() {
   if (DEBUG) return DEBUG_OPEN;
   const last = STOPS.length - 1;
-  const { cam, pin } = scrollState;
-  if (cam >= last - 0.001) return clamp01(pin / OPEN_PART);
+  const { cam } = scrollState;
+  if (cam >= last - 0.05) return 1; // side view reached: open
   const i = Math.min(Math.floor(cam), last - 1);
-  return THREE.MathUtils.lerp(
-    OPEN_AT_STOP[i],
-    OPEN_AT_STOP[i + 1],
-    gapEase(i, cam - i),
-  );
+  return THREE.MathUtils.lerp(OPEN_AT_STOP[i], OPEN_AT_STOP[i + 1], gapEase(i, cam - i));
 }
 
 // =====================================================================
@@ -220,9 +212,7 @@ function useIsMobile() {
 
 // Blender (Z up) → website (Y up), scaled the same way as the model
 function blenderToWeb([x, y, z]: number[]) {
-  return new THREE.Vector3(x, z, -y)
-    .sub(MODEL_CENTER)
-    .multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
+  return new THREE.Vector3(x, z, -y).sub(MODEL_CENTER).multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
 }
 
 // =====================================================================
@@ -231,25 +221,21 @@ function blenderToWeb([x, y, z]: number[]) {
 
 function Machine() {
   const { scene, animations } = useGLTF(MODEL_PATH);
+  const prevCam = useRef(0);
 
   const { scale, height } = useMemo(() => {
-    const size = new THREE.Box3()
-      .setFromObject(scene)
-      .getSize(new THREE.Vector3());
+    const size = new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3());
     const s = MODEL_SIZE / Math.max(size.x, size.y, size.z);
     return { scale: s, height: size.y * s };
   }, [scene]);
 
-  // Reflection strength of every surface
+  // Materials: reflections, logo brightness, no flicker on flat details
   useEffect(() => {
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const mats = Array.isArray(mesh.material)
-        ? mesh.material
-        : [mesh.material];
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of mats) {
-        // Reflection strength
         if ("envMapIntensity" in m) {
           (m as THREE.MeshStandardMaterial).envMapIntensity = ENV_INTENSITY;
           m.needsUpdate = true;
@@ -260,14 +246,12 @@ function Machine() {
           if ("emissiveIntensity" in m) {
             (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
           }
-
           // Logo, LED and text sit flat on the body: draw them slightly in front, so they don't flicker.
-          // The power button is different (its icon runs through the button), so it gets its own copy without this.
+          // The power button's icon runs through the button, so it gets its own copy without this.
           const isButton =
-            mesh.name.startsWith("Button") ||
-            (mesh.parent?.name ?? "").startsWith("Button");
+            mesh.name.startsWith("Button") || (mesh.parent?.name ?? "").startsWith("Button");
           if (isButton && !Array.isArray(mesh.material)) {
-            const own = m.clone(); // copies the glow and reflection settings above
+            const own = m.clone();
             own.polygonOffset = false;
             mesh.material = own;
           } else {
@@ -280,7 +264,7 @@ function Machine() {
     });
   }, [scene]);
 
-  // Blender's animations (door, plates, grapples), positioned by the scroll
+  // Blender's animations (door, plates, grapples)
   const { mixer, actions } = useMemo(() => {
     const m = new THREE.AnimationMixer(scene);
     const list = animations.map((clip) => {
@@ -294,8 +278,28 @@ function Machine() {
   }, [scene, animations]);
 
   useFrame((_, delta) => {
-    // Place every part at the moment of the animation matching the scroll
-    const t = currentOpenAmount() * ANIM_END;
+    const last = STOPS.length - 1;
+    const cam = scrollState.cam;
+    const target = targetOpenAmount();
+    const sideShowing = !DEBUG && cam >= last - 0.5; // the side view is the one on screen
+
+    // Just switched to the side view (at the invisible moment of the fade): start closed
+    if (sideShowing && prevCam.current < last - 0.5) machineState.open = 0;
+
+    if (sideShowing) {
+      // Open and close at a steady speed
+      const step = (delta * ANIM_SPEED) / ANIM_END;
+      machineState.open =
+        target > machineState.open
+          ? Math.min(target, machineState.open + step)
+          : Math.max(target, machineState.open - step * 2);
+    } else {
+      // Other views follow the stops directly
+      machineState.open = target;
+    }
+    prevCam.current = cam;
+
+    const t = machineState.open * ANIM_END;
     for (const a of actions) {
       a.enabled = true;
       a.paused = false;
@@ -345,16 +349,14 @@ function CameraRig() {
     const f = clamp01(t - i);
     const e = gapEase(i, f);
 
-    // For "fade" gaps: the 3D scene fades out, switches view, then fades back in
-    const fade = TRANSITIONS[i] === "fade" ? Math.abs(1 - 2 * f) : 1;
-    gl.domElement.style.opacity = String(fade);
+    // "fade" gaps: the 3D scene fades out, switches view, then fades back in
+    gl.domElement.style.opacity = String(TRANSITIONS[i] === "fade" ? Math.abs(1 - 2 * f) : 1);
+
     const a = stops[i];
     const b = stops[i + 1];
 
     let dTheta = b.sph.theta - a.sph.theta;
-    dTheta =
-      ((((dTheta + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) -
-      Math.PI;
+    dTheta = ((((dTheta + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
 
     sph.set(
       THREE.MathUtils.lerp(a.sph.radius, b.sph.radius, e),
@@ -373,16 +375,9 @@ function CameraRig() {
     // Desktop: machine shifted beside the text. Mobile: centered and lifted.
     const mobile = size.width < MOBILE_BP;
     const offsetX = mobile ? 0 : THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
-    const offsetY =
-      (mobile ? MOBILE_OFFSET_Y : 0) -
-      THREE.MathUtils.lerp(a.offsetY, b.offsetY, e);
+    const offsetY = (mobile ? MOBILE_OFFSET_Y : 0) - THREE.MathUtils.lerp(a.offsetY, b.offsetY, e);
     (camera as THREE.PerspectiveCamera).setViewOffset(
-      size.width,
-      size.height,
-      offsetX * size.width,
-      offsetY * size.height,
-      size.width,
-      size.height,
+      size.width, size.height, offsetX * size.width, offsetY * size.height, size.width, size.height,
     );
   });
 
@@ -447,49 +442,40 @@ function StudioLights() {
 export default function Home() {
   const isMobile = useIsMobile();
 
-  // "Join the waitlist" button that appears once the machine is fully open
+  // "Join the waitlist" button at the side view
   const ctaRef = useRef<HTMLDivElement>(null);
   const textWrapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let raf = 0;
     const loop = () => {
-      const el = ctaRef.current;
-      if (el) {
-        const k = clamp01(
-          ((scrollState.pin - OPEN_PART) / (1 - OPEN_PART)) * 2,
-        );
-        el.style.opacity = String(k);
-        el.style.transform = `translateY(${(1 - k) * 16}px)`;
-        el.style.pointerEvents = k > 0.5 ? "auto" : "none";
+      // Shows while the side view is held on screen and the machine is (almost) open.
+      // Scrolling on past the side view hides it again.
+      const show = !DEBUG && scrollState.inPin && machineState.open >= CTA_AT;
+      if (ctaRef.current) {
+        ctaRef.current.style.opacity = show ? "1" : "0";
+        ctaRef.current.style.transform = show ? "translate(-50%, -50%)" : "translate(-50%, calc(-50% + 16px))";
+        ctaRef.current.style.pointerEvents = show ? "auto" : "none";
       }
-      // The text fades out as the button fades in
-      if (textWrapRef.current) {
-        const k = clamp01(
-          ((scrollState.pin - OPEN_PART) / (1 - OPEN_PART)) * 2,
-        );
-        textWrapRef.current.style.opacity = String(1 - k);
-        textWrapRef.current.style.pointerEvents = k > 0.5 ? "none" : "auto";
+      if (textWrapRef.current && HIDE_TEXT_WITH_CTA) {
+        textWrapRef.current.style.opacity = show ? "0" : "1";
+        textWrapRef.current.style.pointerEvents = show ? "none" : "auto";
       }
       raf = requestAnimationFrame(loop);
     };
     loop();
     return () => cancelAnimationFrame(raf);
   }, []);
+
   // Text fades out before reaching the header
   useEffect(() => {
     if (DEBUG) return;
-    const blocks = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-fade]"),
-    );
+    const blocks = Array.from(document.querySelectorAll<HTMLElement>("[data-fade]"));
     let raf = 0;
 
     const update = () => {
       for (const el of blocks) {
         const top = el.getBoundingClientRect().top;
-        const o = Math.min(
-          Math.max((top - FADE_END) / (FADE_START - FADE_END), 0),
-          1,
-        );
+        const o = Math.min(Math.max((top - FADE_END) / (FADE_START - FADE_END), 0), 1);
         el.style.opacity = String(o);
         el.style.transform = `translateY(${(1 - o) * -10}px)`;
       }
@@ -514,20 +500,13 @@ export default function Home() {
   const textLayout = (side: string): React.CSSProperties => ({
     display: "flex",
     alignItems: isMobile ? "flex-end" : "center",
-    justifyContent: isMobile
-      ? "flex-start"
-      : side === "right"
-        ? "flex-end"
-        : "flex-start",
+    justifyContent: isMobile ? "flex-start" : side === "right" ? "flex-end" : "flex-start",
     padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
     boxSizing: "border-box",
   });
 
   const textBlock = (s: (typeof SECTIONS)[number]) => (
-    <div
-      data-fade
-      style={{ maxWidth: 520, fontFamily: FONT, pointerEvents: "auto" }}
-    >
+    <div data-fade style={{ maxWidth: 520, fontFamily: FONT, pointerEvents: "auto" }}>
       <p
         style={{
           margin: "0 0 20px",
@@ -553,51 +532,27 @@ export default function Home() {
     </div>
   );
 
+  const ctaPos = isMobile ? CTA_POS_MOBILE : CTA_POS;
+
   return (
     <main style={{ position: "relative", background: "var(--bg)" }}>
       {/* Background */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          background: BACKGROUND,
-        }}
-      />
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, background: BACKGROUND }} />
 
       {/* Giant brand name, behind the machine */}
       {!DEBUG && <HeroWord word="einsen" />}
 
       {/* 3D scene */}
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 2,
-          pointerEvents: DEBUG ? "auto" : "none",
-        }}
-      >
+      <div style={{ position: "fixed", inset: 0, zIndex: 2, pointerEvents: DEBUG ? "auto" : "none" }}>
         <Canvas
           camera={{ position: [5, 1, 0], fov: FOV }}
           dpr={[1, 2]}
           gl={{ toneMapping: THREE.AgXToneMapping, toneMappingExposure: 1 }}
         >
           <Suspense fallback={null}>
-            <Environment
-              resolution={isMobile ? 256 : 512}
-              frames={isMobile ? 1 : Infinity}
-            >
+            <Environment resolution={isMobile ? 256 : 512} frames={1}>
               <color attach="background" args={[WORLD_COLOR]} />
               <StudioLights />
-              {/* Long strip above and behind the machine: creates the diagonal band on the top and plate */}
-              {/* Diagonal light strip: placed exactly where the top surface reflects it from stop 2 */}
-              <Lightformer
-                form="rect"
-                intensity={8}
-                position={[0, 12.7, -5.9]}
-                scale={[2.5, 30, 1]}
-                target={[0, 0, 0]}
-              />
             </Environment>
 
             <ScrollTracker />
@@ -613,6 +568,26 @@ export default function Home() {
           </Suspense>
         </Canvas>
       </div>
+
+      {/* "Join the waitlist" next to the machine at the side view.
+          Fixed on screen, so it stays put while the side view is held, then fades away. */}
+      {!DEBUG && (
+        <div
+          ref={ctaRef}
+          style={{
+            position: "fixed",
+            zIndex: 4,
+            left: ctaPos.left,
+            top: ctaPos.top,
+            opacity: 0,
+            transform: "translate(-50%, calc(-50% + 16px))",
+            pointerEvents: "none",
+            transition: "opacity 0.5s ease, transform 0.5s ease",
+          }}
+        >
+          <WaitlistButton />
+        </div>
+      )}
 
       {DEBUG ? (
         <div
@@ -631,10 +606,7 @@ export default function Home() {
           }}
         />
       ) : (
-        <div
-          id="scroll-sections"
-          style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}
-        >
+        <div id="scroll-sections" style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}>
           {SECTIONS.map((s, i) => {
             // Stop 1: hero
             if (i === 0) {
@@ -681,40 +653,17 @@ export default function Home() {
               );
             }
 
-            // Last stop: pinned. The screen holds still while scrolling moves the parts.
+            // Last stop: pinned while the machine opens
             if (i === SECTIONS.length - 1) {
               return (
                 <section
                   key={s.label}
                   data-stop
-                  style={{
-                    position: "relative",
-                    height: `${100 + PIN_LENGTH}vh`,
-                  }}
+                  style={{ position: "relative", height: `${100 + PIN_LENGTH}vh` }}
                 >
-                  <div
-                    style={{
-                      position: "sticky",
-                      top: 0,
-                      height: "100vh",
-                      ...textLayout(s.side),
-                    }}
-                  >
-                    {/* Text and button share the same spot: one fades out as the other fades in */}
-                    <div style={{ display: "grid" }}>
-                      <div ref={textWrapRef} style={{ gridArea: "1 / 1" }}>
-                        {textBlock(s)}
-                      </div>
-                      <div
-                        ref={ctaRef}
-                        style={{
-                          gridArea: "1 / 1",
-                          alignSelf: "center",
-                          opacity: 0,
-                        }}
-                      >
-                        <WaitlistButton />
-                      </div>
+                  <div style={{ position: "sticky", top: 0, height: "100vh", ...textLayout(s.side) }}>
+                    <div ref={textWrapRef} style={{ transition: "opacity 0.5s ease" }}>
+                      {textBlock(s)}
                     </div>
                   </div>
                 </section>
