@@ -49,6 +49,8 @@ const STOPS = [
     target: new THREE.Vector3(0, 0, 0),
     offsetX: 0,
     offsetY: 0.48,
+    // Phones: machine between the brand name and the button
+    mobile: { offsetY: 0.49 },
   },
   {
     name: "Plates out (reference image)",
@@ -56,6 +58,12 @@ const STOPS = [
     target: new THREE.Vector3(-4.3, 0, 1),
     offsetX: 0,
     offsetY: 0.04,
+    // Phones: whole machine centered, in the upper part, text below
+    mobile: {
+      pos: new THREE.Vector3(0, 12.5, 6.8),
+      target: new THREE.Vector3(0, 0, 1),
+      offsetY: -0.2,
+    },
   },
   {
     name: "Side (the machine opens here)",
@@ -63,6 +71,7 @@ const STOPS = [
     target: new THREE.Vector3(0, 0, 1.2),
     offsetX: -0.15,
     offsetY: 0,
+    mobile: { offsetY: -0.2 },
   },
 ];
 
@@ -78,12 +87,6 @@ const OPEN_AT_STOP = [0, 1, 0];
 const PIN_LENGTH = 80;
 const ANIM_SPEED = 2; // 1 = Blender speed, 2 = twice as fast
 const ANIM_END = 7.2; // seconds: everything in the Blender animation has finished by then
-
-// ---- "Join the waitlist" button at the side view ----
-const CTA_AT = 0.75; // appears when the machine is this open (0.75 = three quarters)
-const CTA_POS = { left: "62%", top: "80%" }; // position on screen (desktop), centered on this point
-const CTA_POS_MOBILE = { left: "50%", top: "72%" }; // position on screen (mobile)
-const HIDE_TEXT_WITH_CTA = true; // the section text fades out when the button appears
 
 const FONT = "var(--font-display), system-ui, sans-serif";
 
@@ -108,8 +111,7 @@ const SECTIONS = [
 // ---- Mobile ----
 const MOBILE_BP = 768;
 const REF_ASPECT = 1.4;
-const MAX_ZOOM_OUT = 2.2;
-const MOBILE_OFFSET_Y = 0.12;
+const MAX_ZOOM_OUT = 3.2;
 
 // ---- Light (from the Blender file) ----
 const BLENDER_LIGHTS = [
@@ -191,7 +193,11 @@ function targetOpenAmount() {
   const { cam } = scrollState;
   if (cam >= last - 0.05) return 1; // side view reached: open
   const i = Math.min(Math.floor(cam), last - 1);
-  return THREE.MathUtils.lerp(OPEN_AT_STOP[i], OPEN_AT_STOP[i + 1], gapEase(i, cam - i));
+  return THREE.MathUtils.lerp(
+    OPEN_AT_STOP[i],
+    OPEN_AT_STOP[i + 1],
+    gapEase(i, cam - i),
+  );
 }
 
 // =====================================================================
@@ -212,7 +218,9 @@ function useIsMobile() {
 
 // Blender (Z up) → website (Y up), scaled the same way as the model
 function blenderToWeb([x, y, z]: number[]) {
-  return new THREE.Vector3(x, z, -y).sub(MODEL_CENTER).multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
+  return new THREE.Vector3(x, z, -y)
+    .sub(MODEL_CENTER)
+    .multiplyScalar(MODEL_SIZE / MODEL_WIDTH);
 }
 
 // =====================================================================
@@ -224,7 +232,9 @@ function Machine() {
   const prevCam = useRef(0);
 
   const { scale, height } = useMemo(() => {
-    const size = new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3());
+    const size = new THREE.Box3()
+      .setFromObject(scene)
+      .getSize(new THREE.Vector3());
     const s = MODEL_SIZE / Math.max(size.x, size.y, size.z);
     return { scale: s, height: size.y * s };
   }, [scene]);
@@ -234,7 +244,9 @@ function Machine() {
     scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const mats = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
       for (const m of mats) {
         if ("envMapIntensity" in m) {
           (m as THREE.MeshStandardMaterial).envMapIntensity = ENV_INTENSITY;
@@ -249,7 +261,8 @@ function Machine() {
           // Logo, LED and text sit flat on the body: draw them slightly in front, so they don't flicker.
           // The power button's icon runs through the button, so it gets its own copy without this.
           const isButton =
-            mesh.name.startsWith("Button") || (mesh.parent?.name ?? "").startsWith("Button");
+            mesh.name.startsWith("Button") ||
+            (mesh.parent?.name ?? "").startsWith("Button");
           if (isButton && !Array.isArray(mesh.material)) {
             const own = m.clone();
             own.polygonOffset = false;
@@ -330,33 +343,46 @@ function Machine() {
 // =====================================================================
 
 function CameraRig() {
-  const stops = useMemo(
-    () =>
-      STOPS.map((s) => ({
-        target: s.target,
-        sph: new THREE.Spherical().setFromVector3(s.pos.clone().sub(s.target)),
-        offsetX: s.offsetX,
-        offsetY: s.offsetY,
-      })),
-    [],
-  );
+  const { deskStops, mobileStops } = useMemo(() => {
+    const toRig = (s: {
+      pos: THREE.Vector3;
+      target: THREE.Vector3;
+      offsetX: number;
+      offsetY: number;
+    }) => ({
+      target: s.target,
+      sph: new THREE.Spherical().setFromVector3(s.pos.clone().sub(s.target)),
+      offsetX: s.offsetX,
+      offsetY: s.offsetY,
+    });
+    return {
+      deskStops: STOPS.map(toRig),
+      mobileStops: STOPS.map((s) => toRig({ ...s, ...s.mobile })),
+    };
+  }, []);
   const sph = useMemo(() => new THREE.Spherical(), []);
   const target = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(({ camera, size, gl }) => {
+    const mobile = size.width < MOBILE_BP;
+    const stops = mobile ? mobileStops : deskStops;
     const t = scrollState.cam;
     const i = Math.min(Math.floor(t), stops.length - 2);
     const f = clamp01(t - i);
     const e = gapEase(i, f);
 
     // "fade" gaps: the 3D scene fades out, switches view, then fades back in
-    gl.domElement.style.opacity = String(TRANSITIONS[i] === "fade" ? Math.abs(1 - 2 * f) : 1);
+    gl.domElement.style.opacity = String(
+      TRANSITIONS[i] === "fade" ? Math.abs(1 - 2 * f) : 1,
+    );
 
     const a = stops[i];
     const b = stops[i + 1];
 
     let dTheta = b.sph.theta - a.sph.theta;
-    dTheta = ((((dTheta + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
+    dTheta =
+      ((((dTheta + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) -
+      Math.PI;
 
     sph.set(
       THREE.MathUtils.lerp(a.sph.radius, b.sph.radius, e),
@@ -373,11 +399,16 @@ function CameraRig() {
     camera.lookAt(target);
 
     // Desktop: machine shifted beside the text. Mobile: centered and lifted.
-    const mobile = size.width < MOBILE_BP;
+    // Phones: no sideways shift; each stop's own up/down position
     const offsetX = mobile ? 0 : THREE.MathUtils.lerp(a.offsetX, b.offsetX, e);
-    const offsetY = (mobile ? MOBILE_OFFSET_Y : 0) - THREE.MathUtils.lerp(a.offsetY, b.offsetY, e);
+    const offsetY = -THREE.MathUtils.lerp(a.offsetY, b.offsetY, e);
     (camera as THREE.PerspectiveCamera).setViewOffset(
-      size.width, size.height, offsetX * size.width, offsetY * size.height, size.width, size.height,
+      size.width,
+      size.height,
+      offsetX * size.width,
+      offsetY * size.height,
+      size.width,
+      size.height,
     );
   });
 
@@ -442,40 +473,21 @@ function StudioLights() {
 export default function Home() {
   const isMobile = useIsMobile();
 
-  // "Join the waitlist" button at the side view
-  const ctaRef = useRef<HTMLDivElement>(null);
-  const textWrapRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      // Shows while the side view is held on screen and the machine is (almost) open.
-      // Scrolling on past the side view hides it again.
-      const show = !DEBUG && scrollState.inPin && machineState.open >= CTA_AT;
-      if (ctaRef.current) {
-        ctaRef.current.style.opacity = show ? "1" : "0";
-        ctaRef.current.style.transform = show ? "translate(-50%, -50%)" : "translate(-50%, calc(-50% + 16px))";
-        ctaRef.current.style.pointerEvents = show ? "auto" : "none";
-      }
-      if (textWrapRef.current && HIDE_TEXT_WITH_CTA) {
-        textWrapRef.current.style.opacity = show ? "0" : "1";
-        textWrapRef.current.style.pointerEvents = show ? "none" : "auto";
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    loop();
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   // Text fades out before reaching the header
   useEffect(() => {
     if (DEBUG) return;
-    const blocks = Array.from(document.querySelectorAll<HTMLElement>("[data-fade]"));
+    const blocks = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-fade]"),
+    );
     let raf = 0;
 
     const update = () => {
       for (const el of blocks) {
         const top = el.getBoundingClientRect().top;
-        const o = Math.min(Math.max((top - FADE_END) / (FADE_START - FADE_END), 0), 1);
+        const o = Math.min(
+          Math.max((top - FADE_END) / (FADE_START - FADE_END), 0),
+          1,
+        );
         el.style.opacity = String(o);
         el.style.transform = `translateY(${(1 - o) * -10}px)`;
       }
@@ -500,13 +512,20 @@ export default function Home() {
   const textLayout = (side: string): React.CSSProperties => ({
     display: "flex",
     alignItems: isMobile ? "flex-end" : "center",
-    justifyContent: isMobile ? "flex-start" : side === "right" ? "flex-end" : "flex-start",
+    justifyContent: isMobile
+      ? "flex-start"
+      : side === "right"
+        ? "flex-end"
+        : "flex-start",
     padding: isMobile ? "0 6vw 12vh" : "25vh 6vw 0",
     boxSizing: "border-box",
   });
 
   const textBlock = (s: (typeof SECTIONS)[number]) => (
-    <div data-fade style={{ maxWidth: 520, fontFamily: FONT, pointerEvents: "auto" }}>
+    <div
+      data-fade
+      style={{ maxWidth: 520, fontFamily: FONT, pointerEvents: "auto" }}
+    >
       <p
         style={{
           margin: "0 0 20px",
@@ -532,18 +551,30 @@ export default function Home() {
     </div>
   );
 
-  const ctaPos = isMobile ? CTA_POS_MOBILE : CTA_POS;
-
   return (
     <main style={{ position: "relative", background: "var(--bg)" }}>
       {/* Background */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0, background: BACKGROUND }} />
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          background: BACKGROUND,
+        }}
+      />
 
       {/* Giant brand name, behind the machine */}
       {!DEBUG && <HeroWord word="einsen" />}
 
       {/* 3D scene */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 2, pointerEvents: DEBUG ? "auto" : "none" }}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2,
+          pointerEvents: DEBUG ? "auto" : "none",
+        }}
+      >
         <Canvas
           camera={{ position: [5, 1, 0], fov: FOV }}
           dpr={[1, 2]}
@@ -569,26 +600,6 @@ export default function Home() {
         </Canvas>
       </div>
 
-      {/* "Join the waitlist" next to the machine at the side view.
-          Fixed on screen, so it stays put while the side view is held, then fades away. */}
-      {!DEBUG && (
-        <div
-          ref={ctaRef}
-          style={{
-            position: "fixed",
-            zIndex: 4,
-            left: ctaPos.left,
-            top: ctaPos.top,
-            opacity: 0,
-            transform: "translate(-50%, calc(-50% + 16px))",
-            pointerEvents: "none",
-            transition: "opacity 0.5s ease, transform 0.5s ease",
-          }}
-        >
-          <WaitlistButton />
-        </div>
-      )}
-
       {DEBUG ? (
         <div
           id="cam-readout"
@@ -606,7 +617,10 @@ export default function Home() {
           }}
         />
       ) : (
-        <div id="scroll-sections" style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}>
+        <div
+          id="scroll-sections"
+          style={{ position: "relative", zIndex: 3, pointerEvents: "none" }}
+        >
           {SECTIONS.map((s, i) => {
             // Stop 1: hero
             if (i === 0) {
@@ -617,10 +631,10 @@ export default function Home() {
                   style={{
                     position: "relative",
                     height: "100vh",
+                    padding: isMobile ? "0 6vw 26vh" : "0 6vw 20vh",
                     display: "flex",
                     alignItems: "flex-end",
                     justifyContent: isMobile ? "center" : "space-between",
-                    padding: "0 6vw 20vh",
                     boxSizing: "border-box",
                   }}
                 >
@@ -642,7 +656,7 @@ export default function Home() {
                       position: "absolute",
                       left: 0,
                       right: 0,
-                      bottom: isMobile ? "26vh" : "28vh",
+                      bottom: isMobile ? "14vh" : "28vh",
                       display: "flex",
                       justifyContent: "center",
                     }}
@@ -659,12 +673,20 @@ export default function Home() {
                 <section
                   key={s.label}
                   data-stop
-                  style={{ position: "relative", height: `${100 + PIN_LENGTH}vh` }}
+                  style={{
+                    position: "relative",
+                    height: `${100 + PIN_LENGTH}vh`,
+                  }}
                 >
-                  <div style={{ position: "sticky", top: 0, height: "100vh", ...textLayout(s.side) }}>
-                    <div ref={textWrapRef} style={{ transition: "opacity 0.5s ease" }}>
-                      {textBlock(s)}
-                    </div>
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      height: "100vh",
+                      ...textLayout(s.side),
+                    }}
+                  >
+                    {textBlock(s)}
                   </div>
                 </section>
               );
@@ -675,7 +697,10 @@ export default function Home() {
               <section
                 key={s.label}
                 data-stop
-                style={{ height: `${s.height}vh`, ...textLayout(s.side) }}
+                style={{
+                  height: `${isMobile ? Math.max(s.height, 70) : s.height}vh`,
+                  ...textLayout(s.side),
+                }}
               >
                 {textBlock(s)}
               </section>
