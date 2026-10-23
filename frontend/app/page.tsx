@@ -25,7 +25,7 @@ import WaitlistButton from "./component/WaitlistButton";
 const DEBUG = false;
 const DEBUG_OPEN = 1; // in DEBUG mode: 0 = parts closed, 1 = parts open
 
-const MODEL_PATH = "/models/model4.glb";
+const MODEL_PATH = "/models/model4withproperlogo.glb";
 const MODEL_SIZE = 8;
 const FOV = 30; // zoom: smaller = more zoomed in
 
@@ -241,19 +241,32 @@ function Machine() {
         ? mesh.material
         : [mesh.material];
       for (const m of mats) {
-        // Logo, power icon, LED and text sit flat on the body: draw them slightly in front, so they don't flicker
-        if (m.name === "Material.007") {
-          m.polygonOffset = true;
-          m.polygonOffsetFactor = -1;
-          m.polygonOffsetUnits = -4;
-        }
-        // Brighter logo, LED and text
-        if (m.name === "Material.007" && "emissiveIntensity" in m) {
-          (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
-        }
+        // Reflection strength
         if ("envMapIntensity" in m) {
           (m as THREE.MeshStandardMaterial).envMapIntensity = ENV_INTENSITY;
           m.needsUpdate = true;
+        }
+
+        if (m.name === "Material.007") {
+          // Brighter logo, LED, text and power icon
+          if ("emissiveIntensity" in m) {
+            (m as THREE.MeshStandardMaterial).emissiveIntensity = LOGO_GLOW;
+          }
+
+          // Logo, LED and text sit flat on the body: draw them slightly in front, so they don't flicker.
+          // The power button is different (its icon runs through the button), so it gets its own copy without this.
+          const isButton =
+            mesh.name.startsWith("Button") ||
+            (mesh.parent?.name ?? "").startsWith("Button");
+          if (isButton && !Array.isArray(mesh.material)) {
+            const own = m.clone(); // copies the glow and reflection settings above
+            own.polygonOffset = false;
+            mesh.material = own;
+          } else {
+            m.polygonOffset = true;
+            m.polygonOffsetFactor = -1;
+            m.polygonOffsetUnits = -4;
+          }
         }
       }
     });
