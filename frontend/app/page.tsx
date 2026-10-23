@@ -37,6 +37,11 @@ const BACKGROUND = [
   "linear-gradient(75deg, #dddbd6 0%, #d4d2cd 58%, #9c9b98 66%, #555554 76%, #454544 100%)",
 ].join(", ");
 
+const TRANSITIONS = ["move", "fade"];
+function gapEase(i: number, f: number) {
+  return TRANSITIONS[i] === "fade" ? (f < 0.5 ? 0 : 1) : smooth(f);
+}
+
 const LOGO_GLOW = 5; // brightness of the logo, LED strip and text
 
 // ---- Camera stops, in scroll order ----
@@ -80,7 +85,8 @@ const OPEN_AT_STOP = [0, 1, 0];
 
 // How much scrolling the pinned last stop takes (in screen heights x 100).
 // Bigger = the parts move slower relative to the scroll.
-const PIN_LENGTH = 120;
+const OPEN_PART = 0.75; // share of the pinned scroll used for opening; the rest shows the button
+const PIN_LENGTH = 160; // slightly longer, to make room for the button moment
 
 // Length of the Blender animation used (seconds): everything has finished moving by 10s
 const ANIM_END = 7.2;
@@ -89,17 +95,19 @@ const FONT = "var(--font-display), system-ui, sans-serif";
 
 // One per stop. side: "left" or "right" (where the text sits).
 const SECTIONS = [
-  { label: "", text: "", side: "left" }, // hero
+  { label: "", text: "", side: "left", height: 100 }, // hero
   {
     label: "Ready",
     text: "One touch starts the cycle. No settings, no guesswork, just a perfectly pressed shirt.",
     side: "left",
+    height: 60,
   },
 
   {
     label: "Loading",
     text: "The door opens, the plates slide out. Lay your shirt down and let the machine take over.",
     side: "left",
+    height: 100,
   },
 ];
 
@@ -185,12 +193,12 @@ function currentOpenAmount() {
   if (DEBUG) return DEBUG_OPEN;
   const last = STOPS.length - 1;
   const { cam, pin } = scrollState;
-  if (cam >= last - 0.001) return pin;
+  if (cam >= last - 0.001) return clamp01(pin / OPEN_PART);
   const i = Math.min(Math.floor(cam), last - 1);
   return THREE.MathUtils.lerp(
     OPEN_AT_STOP[i],
     OPEN_AT_STOP[i + 1],
-    smooth(cam - i),
+    gapEase(i, cam - i),
   );
 }
 
@@ -331,10 +339,15 @@ function CameraRig() {
   const sph = useMemo(() => new THREE.Spherical(), []);
   const target = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame(({ camera, size }) => {
+  useFrame(({ camera, size, gl }) => {
     const t = scrollState.cam;
     const i = Math.min(Math.floor(t), stops.length - 2);
-    const e = smooth(clamp01(t - i));
+    const f = clamp01(t - i);
+    const e = gapEase(i, f);
+
+    // For "fade" gaps: the 3D scene fades out, switches view, then fades back in
+    const fade = TRANSITIONS[i] === "fade" ? Math.abs(1 - 2 * f) : 1;
+    gl.domElement.style.opacity = String(fade);
     const a = stops[i];
     const b = stops[i + 1];
 
@@ -434,6 +447,34 @@ function StudioLights() {
 export default function Home() {
   const isMobile = useIsMobile();
 
+  // "Join the waitlist" button that appears once the machine is fully open
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const textWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const el = ctaRef.current;
+      if (el) {
+        const k = clamp01(
+          ((scrollState.pin - OPEN_PART) / (1 - OPEN_PART)) * 2,
+        );
+        el.style.opacity = String(k);
+        el.style.transform = `translateY(${(1 - k) * 16}px)`;
+        el.style.pointerEvents = k > 0.5 ? "auto" : "none";
+      }
+      // The text fades out as the button fades in
+      if (textWrapRef.current) {
+        const k = clamp01(
+          ((scrollState.pin - OPEN_PART) / (1 - OPEN_PART)) * 2,
+        );
+        textWrapRef.current.style.opacity = String(1 - k);
+        textWrapRef.current.style.pointerEvents = k > 0.5 ? "none" : "auto";
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, []);
   // Text fades out before reaching the header
   useEffect(() => {
     if (DEBUG) return;
@@ -659,7 +700,22 @@ export default function Home() {
                       ...textLayout(s.side),
                     }}
                   >
-                    {textBlock(s)}
+                    {/* Text and button share the same spot: one fades out as the other fades in */}
+                    <div style={{ display: "grid" }}>
+                      <div ref={textWrapRef} style={{ gridArea: "1 / 1" }}>
+                        {textBlock(s)}
+                      </div>
+                      <div
+                        ref={ctaRef}
+                        style={{
+                          gridArea: "1 / 1",
+                          alignSelf: "center",
+                          opacity: 0,
+                        }}
+                      >
+                        <WaitlistButton />
+                      </div>
+                    </div>
                   </div>
                 </section>
               );
@@ -670,7 +726,7 @@ export default function Home() {
               <section
                 key={s.label}
                 data-stop
-                style={{ height: "100vh", ...textLayout(s.side) }}
+                style={{ height: `${s.height}vh`, ...textLayout(s.side) }}
               >
                 {textBlock(s)}
               </section>
